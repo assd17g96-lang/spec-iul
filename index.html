@@ -1,0 +1,1573 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spec IUL – Информационно-удостоверяющий лист</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --primary: #1a1a1a;
+      --bg: #fafafa;
+      --surface: #fff;
+      --border: #ccc;
+      --text: #1a1a1a;
+      --text-secondary: #4a4a4a;
+      --radius: 6px;
+      --shadow: 0 2px 8px rgba(0, 0, 0, .06);
+      --highlight: #fff3cd;
+      --highlight-border: #ffc107
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    body {
+      font-family: "Inter", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6
+    }
+
+    .app-header {
+      background: #1a1a1a;
+      color: #fff;
+      padding: 1.5rem 1rem;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 100
+    }
+
+    .app-header h1 {
+      font-weight: 700;
+      font-size: 2rem;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: .5rem
+    }
+
+    .nav {
+      display: flex;
+      justify-content: center;
+      gap: .5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, .2);
+      padding: .6rem 1.2rem;
+      color: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: .2s;
+      font-size: .85rem
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, .1)
+    }
+
+    .nav-btn.active {
+      background: #fff;
+      color: #1a1a1a;
+      font-weight: 600
+    }
+
+    .app-container {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1.5rem
+    }
+
+    .page {
+      display: none;
+      animation: fadeIn .3s
+    }
+
+    .page.active-page {
+      display: block
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow)
+    }
+
+    .card-title {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .5rem;
+      padding-bottom: .75rem;
+      border-bottom: 2px solid var(--primary)
+    }
+
+    .btn {
+      padding: .5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      font-size: .85rem;
+      transition: .2s;
+      background: transparent
+    }
+
+    .btn:hover {
+      background: #f0f0f0
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary)
+    }
+
+    .btn-primary:hover {
+      background: #333
+    }
+
+    .btn-success {
+      background: #1a1a1a;
+      color: #fff
+    }
+
+    .btn-outline {
+      border: 1px solid var(--border);
+      color: var(--text-secondary)
+    }
+
+    .btn-outline:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: #f5f5f5
+    }
+
+    .btn-sm {
+      padding: .3rem .7rem;
+      font-size: .8rem
+    }
+
+    .input-field {
+      width: 100%;
+      padding: .6rem .8rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: .85rem;
+      outline: none;
+      background: #fff
+    }
+
+    .input-field:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, .05)
+    }
+
+    .flex-row {
+      display: flex;
+      gap: .75rem;
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    .file-drop {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 1rem;
+      background: #fafafa;
+      transition: .2s
+    }
+
+    .file-drop:hover {
+      border-color: var(--primary);
+      background: #f0f0f0
+    }
+
+    .status-bar {
+      background: #f8f8f8;
+      padding: .75rem;
+      border-left: 3px solid var(--primary);
+      font-size: .85rem;
+      margin: 1rem 0;
+      font-family: monospace
+    }
+
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      margin: .5rem 0;
+      display: none;
+      border-radius: 2px;
+      overflow: hidden
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #1a1a1a, #4a4a4a);
+      width: 0%;
+      transition: width .3s
+    }
+
+    .reference-item {
+      background: #fff;
+      padding: .75rem;
+      margin-bottom: .5rem;
+      border-left: 3px solid #ccc;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .5rem
+    }
+
+    .reference-item:hover {
+      border-left-color: var(--primary)
+    }
+
+    .badge {
+      background: #1a1a1a;
+      color: #fff;
+      padding: .2rem .6rem;
+      border-radius: 12px;
+      font-size: .75rem
+    }
+
+    .result-item {
+      background: #fff;
+      padding: 10px;
+      border-left: 3px solid #000;
+      margin: 5px 0;
+      border-radius: 4px
+    }
+
+    .search-stats {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem
+    }
+
+    .stat-item {
+      background: #f0f0f0;
+      padding: .3rem 1rem;
+      border-radius: 20px;
+      font-size: .85rem
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      background: #1a1a1a;
+      color: #fff;
+      padding: .8rem 1.5rem;
+      border-radius: 8px;
+      z-index: 1100;
+      animation: slideIn .3s
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(50px)
+      }
+    }
+
+    .iul-preview {
+      background: #fff;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+      overflow-x: auto;
+      margin-top: 1rem;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow)
+    }
+
+    .iul-preview table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8pt;
+      font-family: "Courier New", monospace;
+      table-layout: fixed
+    }
+
+    .iul-preview th,
+    .iul-preview td {
+      border: 1px solid #000;
+      padding: 6pt;
+      text-align: center;
+      vertical-align: middle;
+      word-wrap: break-word
+    }
+
+    .iul-preview th {
+      background: #f5f5f5;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 7pt
+    }
+
+    .context-box {
+      font-family: monospace;
+      font-size: .8rem;
+      background: #f9f9f9;
+      padding: 8px;
+      margin-top: 5px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border: 1px solid #eee
+    }
+
+    .context-label {
+      font-weight: 600;
+      font-size: .75rem;
+      color: #666;
+      margin-bottom: 4px
+    }
+
+    .highlight-match {
+      background: var(--highlight);
+      border: 1px solid var(--highlight-border);
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-weight: 600
+    }
+
+    .sync-section {
+      background: #f8f9fa;
+      padding: 1rem;
+      border-radius: var(--radius);
+      margin: 1rem 0;
+      border: 1px dashed var(--border)
+    }
+
+    .sync-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: .5rem;
+      margin-top: .5rem
+    }
+
+    .sync-item {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .85rem
+    }
+
+    .sync-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px
+    }
+
+    .extracted-text-area {
+      background: #f9f9f9;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin: 1rem 0;
+      font-family: monospace;
+      font-size: .8rem;
+      line-height: 1.8;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all
+    }
+
+    .extracted-line {
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-bottom: 2px
+    }
+
+    .extracted-line.from-text {
+      border-left: 3px solid #2196F3
+    }
+
+    .extracted-line.from-ocr {
+      border-left: 3px solid #FF9800
+    }
+
+    .extracted-meta {
+      font-size: .7rem;
+      color: #888;
+      margin-right: 8px
+    }
+
+    .zone-controls {
+      background: #f0f4f8;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin: 1rem 0
+    }
+
+    .zone-controls label {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .85rem;
+      margin-bottom: .5rem
+    }
+
+    .zone-controls input[type="range"] {
+      flex: 1;
+      max-width: 200px
+    }
+
+    .zone-controls .zone-value {
+      font-family: monospace;
+      font-weight: 600;
+      min-width: 50px;
+      text-align: right
+    }
+
+    .iul-search-row {
+      display: flex;
+      gap: .5rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding: .75rem;
+      background: #f0f4f8;
+      border-radius: var(--radius);
+      border: 1px solid var(--border)
+    }
+
+    .iul-search-row input {
+      flex: 1
+    }
+
+    .iul-search-results {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-top: .5rem;
+      display: none
+    }
+
+    .iul-search-item {
+      padding: .5rem .75rem;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+      font-size: .85rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .iul-search-item:hover {
+      background: #e8f0fe
+    }
+
+    .iul-search-item:last-child {
+      border-bottom: none
+    }
+
+    .iul-search-item .org-name {
+      color: #666;
+      font-size: .75rem
+    }
+
+    .nav-btn:focus,
+    .btn:focus,
+    .input-field:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px
+    }
+
+    @media(max-width:768px) {
+      .app-header h1 {
+        font-size: 1.5rem
+      }
+
+      .nav-btn {
+        padding: .4rem .8rem;
+        font-size: .75rem
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="app-header">
+    <h1>Spec IUL</h1>
+    <div style="opacity:.7;font-size:.85rem;letter-spacing:2px">Информационно-удостоверяющий лист</div>
+    <nav class="nav">
+      <button class="nav-btn active" data-page="search">🔎 Поиск</button>
+      <button class="nav-btn" data-page="reference">📝 Справочник</button>
+      <button class="nav-btn" data-page="objects">🏗 Объекты</button>
+      <button class="nav-btn" data-page="iul">📄 ИУЛ</button>
+      <button class="nav-btn" data-page="sync">🔄 Синхр.</button>
+    </nav>
+  </header>
+  <div class="app-container">
+    <div id="searchPage" class="page active-page">
+      <div class="card">
+        <div class="card-title">📄 Загрузка PDF</div>
+        <div id="dropZone" class="file-drop" tabindex="0">
+          <input type="file" id="fileInput" accept=".pdf" style="display:none" />
+          <div style="font-size:2rem">📁</div>
+          <span>Перетащите PDF или нажмите для выбора</span>
+          <div id="fileName" style="font-size:.8rem;margin-top:.5rem;color:#666"></div>
+        </div>
+        <div id="status" class="status-bar">⏳ Документ не загружен</div>
+        <div class="progress-bar" id="progressBar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div id="fileInfoBlock" style="display:none">
+          <div class="file-info-grid" id="fileInfoGrid"></div>
+        </div>
+        <button id="searchAndCompareBtn" class="btn btn-success" style="width:100%;margin-top:.5rem" disabled>🔍 Извлечь
+          текст и сравнить со справочником</button>
+        <button id="showOcrZoneBtn" class="btn btn-outline" style="width:100%;margin-top:.5rem" disabled>👁 Показать
+          зону OCR на последней странице</button>
+      </div>
+      <div id="zoneControlsCard" class="card" style="display:none">
+        <div class="card-title"><span>⚙️ Настройка зоны поиска штампа</span><button id="resetZoneBtn"
+            class="btn btn-outline btn-sm">↺ Сбросить</button></div>
+        <div class="zone-controls">
+          <label>Ширина зоны (px): <input type="range" id="stampWidthSlider" min="50" max="800" value="550" /><span
+              class="zone-value" id="stampWidthValue">550</span></label>
+          <label>Высота зоны (px): <input type="range" id="stampHeightSlider" min="30" max="400" value="200" /><span
+              class="zone-value" id="stampHeightValue">200</span></label>
+          <p style="font-size:.75rem;color:#666;margin-top:.5rem">Двигайте ползунки и нажимайте «Показать зону» чтобы
+            увидеть рамку. Зона отсчитывается от правого нижнего угла страницы.</p>
+        </div>
+      </div>
+      <div id="extractedTextCard" class="card" style="display:none">
+        <div class="card-title"><span>📋 Извлечённый текст (слева направо)</span><span id="extractedStats" class="badge"
+            style="font-size:.75rem"></span></div>
+        <div id="extractedTextArea" class="extracted-text-area"></div>
+      </div>
+      <div id="resultsCard" class="card" style="display:none">
+        <div class="card-title"><span>📊 Результаты сравнения</span><button id="clearResultsBtn"
+            class="btn btn-outline btn-sm">✕ Очистить</button></div>
+        <div id="resultsContent"></div>
+      </div>
+    </div>
+    <div id="referencePage" class="page">
+      <div class="card">
+        <div class="card-title"><span>📝 Справочник: Организация → Роль → Фамилия</span>
+          <div><button id="addRefEntryBtn" class="btn btn-primary btn-sm">+ Добавить запись</button><button
+              id="exportRefBtn" class="btn btn-outline btn-sm">📤 Экспорт</button><label class="btn btn-outline btn-sm"
+              style="cursor:pointer">📥 Импорт<input type="file" id="importRefFile" accept=".json"
+                style="display:none" /></label></div>
+        </div>
+        <div id="refListContainer" style="max-height:500px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div id="objectsPage" class="page">
+      <div class="card">
+        <div class="card-title"><span>🏗 Список объектов</span>
+          <div><button id="exportObjectsBtn" class="btn btn-outline btn-sm">📤 Экспорт</button><label
+              class="btn btn-outline btn-sm" style="cursor:pointer">📥 Импорт<input type="file" id="importObjectsFile"
+                accept=".json" style="display:none" /></label></div>
+        </div>
+        <div class="flex-row" style="margin-bottom:1rem"><input type="text" id="newObjectName"
+            placeholder="Наименование объекта" class="input-field" style="flex:3" /><button id="addObjectBtn"
+            class="btn btn-primary">+ Добавить</button></div>
+        <div id="objectsListContainer" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div id="iulPage" class="page">
+      <div class="card">
+        <div class="card-title"><span>📄 Информационно-удостоверяющий лист</span>
+          <div><button id="refreshIulBtn" class="btn btn-outline btn-sm">🔄 Обновить</button><button id="downloadDocBtn"
+              class="btn btn-primary btn-sm">📥 Скачать DOCX</button></div>
+        </div>
+        <div class="card-title">
+          <span>📄 Информационно-удостоверяющий лист</span>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <button id="refreshIulBtn" class="btn btn-outline btn-sm">🔄 Обновить</button>
+            <button id="downloadDocBtn" class="btn btn-primary btn-sm">📥 Скачать DOCX</button>
+            <button id="signRdBtn" class="btn btn-success btn-sm">✍️ Подпись РД</button>
+            <button id="signPdBtn" class="btn btn-outline btn-sm">✍️ Подпись ПД</button>
+          </div>
+        </div>
+        <div class="flex-row" style="gap:1rem;margin-bottom:1rem">
+          <div style="flex:1"><label for="iulNpp">№ п/п:</label><input type="text" id="iulNpp" class="input-field"
+              value="1" /></div>
+          <div style="flex:1"><label for="iulVersion">Версия:</label><input type="text" id="iulVersion"
+              class="input-field" value="0" /></div>
+        </div>
+        <div><label for="iulObjectName">Наименование объекта:</label></div>
+        <div class="flex-row" style="margin-bottom:1rem">
+          <input type="text" id="iulObjectName" class="input-field" list="objectDatalist"
+            placeholder="Выберите из списка или введите вручную" style="flex:4" />
+          <datalist id="objectDatalist"></datalist>
+          <button id="addCurrentObjectBtn" class="btn btn-outline btn-sm">💾 Сохранить</button>
+          <button id="resetObjectBtn" class="btn btn-outline btn-sm">↺ Сбросить</button>
+        </div>
+        <div class="iul-search-row">
+          <span style="font-size:.85rem;white-space:nowrap">🔎 Найти объект:</span>
+          <input type="text" id="iulObjectSearch" class="input-field" placeholder="Введите название объекта..."
+            style="flex:1" />
+          <button id="iulObjectSearchClearBtn" class="btn btn-outline btn-sm" style="display:none">✕</button>
+        </div>
+        <div id="iulObjectSearchResults" class="iul-search-results"></div>
+        <div class="iul-search-row">
+          <span style="font-size:.85rem;white-space:nowrap">🔎 Найти по фамилии:</span>
+          <input type="text" id="iulSurnameSearch" class="input-field" placeholder="Введите фамилию..."
+            style="flex:1" />
+          <button id="iulSearchClearBtn" class="btn btn-outline btn-sm" style="display:none">✕</button>
+        </div>
+        <div id="iulSearchResults" class="iul-search-results"></div>
+        <div><label>Строки «Работа / ФИО»:</label></div>
+        <div id="iulRowsContainer" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem"></div>
+        <button id="addManualRowBtn" class="btn btn-outline btn-sm">+ Добавить строку вручную</button>
+        <div id="iulPreview" class="iul-preview" style="margin-top:1.5rem"></div>
+      </div>
+    </div>
+    <div id="syncPage" class="page">
+      <div class="card">
+        <div class="card-title">🔄 Синхронизация данных</div>
+        <div class="sync-section"><strong>📦 Экспорт всех данных</strong>
+          <p style="font-size:.85rem;margin:.5rem 0">Сохраните справочники, объекты и настройки в один файл.</p>
+          <div class="sync-grid"><label class="sync-item"><input type="checkbox" id="syncRef" checked /> 📝
+              Справочник</label><label class="sync-item"><input type="checkbox" id="syncObjects" checked /> 🏗
+              Объекты</label><label class="sync-item"><input type="checkbox" id="syncMeta" checked /> ⚙️
+              Настройки</label></div><button id="exportAllDataBtn" class="btn btn-primary" style="margin-top:1rem">📥
+            Скачать бэкап</button>
+        </div>
+        <div class="sync-section"><strong>📤 Импорт данных</strong>
+          <p style="font-size:.85rem;margin:.5rem 0">Восстановите данные из файла бэкапа.</p><label
+            class="btn btn-outline" style="cursor:pointer;width:fit-content">📁 Выбрать файл<input type="file"
+              id="importAllDataFile" accept=".json" style="display:none" /></label>
+          <p id="importStatus" style="font-size:.8rem;margin-top:.5rem"></p>
+        </div>
+        <div class="sync-section"><strong>🗑 Сброс данных</strong>
+          <p style="font-size:.85rem;margin:.5rem 0">Удалить все локальные данные и вернуть настройки по умолчанию.</p>
+          <button id="resetAllDataBtn" class="btn btn-outline" style="border-color:#dc3545;color:#dc3545">⚠️ Сбросить
+            всё</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // ======================= НАСТРОЙКИ ПОИСКА =======================
+    const SKIP_PAGE = 2;
+    const SEARCH_CONFIG = {
+      THRESHOLD: 45,
+      FUZZY_NAME: 0.7,
+      FUZZY_ROLE: 0.65,
+      LINE_TOLERANCE: 8,
+      FUZZY_OCR_NAME: 0.55,
+      FUZZY_OCR_ROLE: 0.5,
+      STAMP_WIDTH: 550,
+      STAMP_HEIGHT: 200,
+      OCR_SCALE: 2,
+      OCR_CONTRAST_BOOST: 40,
+      // ★ УСКОРЕНИЕ: максимум страниц под OCR (сканы)
+      MAX_OCR_PAGES: 3,
+    };
+
+    const STAMP_MARKERS = [
+      "разработал", "разраб", "проверил", "провер",
+      "н.контроль", "н.контр", "нормоконтроль", "норм. контроль",
+      "гип", "г.и.п.", "главный инженер",
+      "утвердил", "утверждаю", "согласовал", "согласовано",
+      "лист", "листов", "инв. № подл.", "подп. и дата",
+      "взам. инв. №", "инв. № дубл.",
+    ];
+
+    let fuzzyCache = new Map();
+    let levCache = new Map();
+    let ocrCache = new Map();
+    let tesseractWorker = null;
+    let tesseractWorkerPromise = null;
+    let extractedLinesGlobal = [];
+    let refEntriesNormalized = [];
+
+    function rebuildRefCache() {
+      refEntriesNormalized = refEntries.map(e => {
+        const roleAliasesRaw = getAllRoleAliases(e.role);
+        const nameVariantsRaw = generateWordVariants(e.lastName);
+        return {
+          ...e,
+          roleAliasesRaw,
+          nameVariantsRaw,
+          roleAliases: roleAliasesRaw.map(a => normalizeTextSmart(a)),
+          nameVariants: nameVariantsRaw.map(v => normalizeTextSmart(v)),
+          roleNorm: normalizeTextSmart(e.role),
+          lastNameNorm: normalizeTextSmart(e.lastName),
+        };
+      });
+    }
+
+    function normalizeText(text = "") {
+      return text.toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    }
+    function normalizeTextSmart(text = "") {
+      let t = text.toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s]/gu, " ");
+      t = t.replace(/(\p{L})\s+(\p{L})/gu, "$1$2");
+      t = t.replace(/(\p{L})\s+(\p{L})/gu, "$1$2");
+      t = t.replace(/(\p{L})\s+(\p{L})/gu, "$1$2");
+      return t.replace(/\s+/g, " ").trim();
+    }
+    function levenshtein(a, b) {
+      const key = `${a}|${b}`;
+      if (levCache.has(key)) return levCache.get(key);
+      if (a === b) { levCache.set(key, 0); return 0; }
+      const matrix = [];
+      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+      for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+          if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+          else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+        }
+      }
+      const res = matrix[b.length][a.length];
+      levCache.set(key, res);
+      return res;
+    }
+    function fuzzyMatch(str1, str2, threshold = 0.7) {
+      const key = `${str1}|${str2}|${threshold}`;
+      if (fuzzyCache.has(key)) return fuzzyCache.get(key);
+      const s1 = normalizeText(str1), s2 = normalizeText(str2);
+      if (s1 === s2) { fuzzyCache.set(key, true); return true; }
+      if (s1.length === 0 || s2.length === 0) { fuzzyCache.set(key, false); return false; }
+      const dist = levenshtein(s1, s2);
+      const maxLen = Math.max(s1.length, s2.length);
+      const sim = 1 - dist / maxLen;
+      const result = sim >= threshold;
+      fuzzyCache.set(key, result);
+      return result;
+    }
+    function generateWordVariants(word) {
+      const w = word.toLowerCase().trim();
+      if (w.length < 2) return [w];
+      const variants = new Set([w]);
+      const noSpaces = w.replace(/\s+/g, "");
+      if (noSpaces !== w && noSpaces.length >= 2) variants.add(noSpaces);
+      const endings = ["а", "у", "ой", "е", "ы", "ым", "ом", "ого", "ому"];
+      let stem = w;
+      for (const end of endings) {
+        if (w.endsWith(end) && w.length > end.length + 2) { stem = w.slice(0, -end.length); break; }
+      }
+      for (const end of endings) {
+        const variant = stem + end;
+        if (variant.length >= 3) variants.add(variant);
+      }
+      if (noSpaces !== w) {
+        let stemNs = noSpaces;
+        for (const end of endings) {
+          if (noSpaces.endsWith(end) && noSpaces.length > end.length + 2) { stemNs = noSpaces.slice(0, -end.length); break; }
+        }
+        for (const end of endings) {
+          const variant = stemNs + end;
+          if (variant.length >= 3) variants.add(variant);
+        }
+      }
+      return Array.from(variants);
+    }
+    function getAllRoleAliases(role) {
+      const raw = role.toLowerCase().trim();
+      const aliases = new Set([raw, raw.replace(/\./g, "").replace(/\s+/g, "")]);
+      const words = raw.split(/\s+/);
+      if (words.length >= 2) {
+        aliases.add(words.map((w) => w[0]).join(""));
+        aliases.add(words.map((w) => w.slice(0, 3)).join(""));
+      }
+      if (words.length === 1 && raw.length > 3) {
+        aliases.add(raw.slice(0, 4));
+        aliases.add(raw.slice(0, 4) + ".");
+      }
+      const roleMap = {
+        "н.контроль": ["н.контроль", "н.контр", "н/контр", "н. контр", "н.контр.", "норм. контроль", "нормоконтроль"],
+        гип: ["гип", "г.и.п.", "главный инженер проекта", "гл. инженер"],
+        разработал: ["разработал", "разраб.", "разраб", "разраб ."],
+        проверил: ["проверил", "провер.", "провер"],
+        "генеральный директор": ["генеральный директор", "ген. директор", "гендир", "директор"],
+      };
+      for (const [key, values] of Object.entries(roleMap)) {
+        if (raw === key || aliases.has(key.replace(/\./g, "").replace(/\s+/g, ""))) {
+          values.forEach((v) => aliases.add(v));
+        }
+      }
+      if (raw.includes("контроль") || raw.includes("контр")) {
+        aliases.add("н.контроль");
+        aliases.add("нормоконтроль");
+      }
+      return Array.from(aliases);
+    }
+
+    // ======================= TESSERACT.JS =======================
+    // ★ УСКОРЕНИЕ: initTesseractWorker больше не создаёт worker параллельно при повторных
+    // вызовах (раньше при гонке двух вызовов до завершения первого могли уйти 2 createWorker).
+    // Теперь промис инициализации переиспользуется, а сам worker создаётся один раз за сессию.
+    async function initTesseractWorker() {
+      if (tesseractWorker) return tesseractWorker;
+      if (tesseractWorkerPromise) return tesseractWorkerPromise;
+      tesseractWorkerPromise = (async () => {
+        console.log("🔧 Инициализация Tesseract.js worker...");
+        const start = performance.now();
+        const worker = await Tesseract.createWorker("rus", 1, { logger: () => { } });
+        try {
+          await worker.setParameters({ tessedit_pageseg_mode: "6" });
+        } catch (e) { console.warn("PSM не применился:", e); }
+        console.log(`✅ Worker готов за ${formatMs(performance.now() - start)}`);
+        tesseractWorker = worker;
+        return worker;
+      })();
+      return tesseractWorkerPromise;
+    }
+
+    // ★ УСКОРЕНИЕ: адаптивный масштаб рендера (A4/A3 = 2, большие форматы = 1)
+    async function cropAndPreprocessStamp(pageData) {
+      const { pdfPage, viewport } = pageData;
+      const renderScale = viewport.width <= 1000 ? 2 : 1;
+      const fullViewport = pdfPage.getViewport({ scale: renderScale });
+      const fullCanvas = document.createElement("canvas");
+      fullCanvas.width = fullViewport.width;
+      fullCanvas.height = fullViewport.height;
+      const fullCtx = fullCanvas.getContext("2d");
+      fullCtx.fillStyle = "#ffffff";
+      fullCtx.fillRect(0, 0, fullCanvas.width, fullCanvas.height);
+      await pdfPage.render({ canvasContext: fullCtx, viewport: fullViewport }).promise;
+
+      // Кроп в координатах renderScale
+      const sx = Math.max(0, fullCanvas.width - SEARCH_CONFIG.STAMP_WIDTH * renderScale);
+      const sy = Math.max(0, fullCanvas.height - SEARCH_CONFIG.STAMP_HEIGHT * renderScale);
+      const sw = Math.min(SEARCH_CONFIG.STAMP_WIDTH * renderScale, fullCanvas.width - sx);
+      const sh = Math.min(SEARCH_CONFIG.STAMP_HEIGHT * renderScale, fullCanvas.height - sy);
+
+      // Целевой canvas с OCR_SCALE (апскейл через drawImage)
+      const outW = Math.round(sw * (SEARCH_CONFIG.OCR_SCALE / renderScale));
+      const outH = Math.round(sh * (SEARCH_CONFIG.OCR_SCALE / renderScale));
+      const offCanvas = document.createElement("canvas");
+      offCanvas.width = outW; offCanvas.height = outH;
+      const ctx = offCanvas.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, outW, outH);
+
+      const imageData = ctx.getImageData(0, 0, outW, outH);
+      const d = imageData.data;
+      const boost = SEARCH_CONFIG.OCR_CONTRAST_BOOST;
+      for (let i = 0; i < d.length; i += 4) {
+        const avg = (d[i] + d[i + 1] + d[i + 2]) / 3;
+        const val = avg < 128 ? Math.max(0, avg - boost) : Math.min(255, avg + boost);
+        d[i] = val; d[i + 1] = val; d[i + 2] = val;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      console.log(`📐 Кроп стр.${pageData.page}: ${outW}×${outH} (renderScale=${renderScale})`);
+      return offCanvas;
+    }
+
+    async function ocrRecognizeStamp(pageData) {
+      const cacheKey = `${pageData.page}_${pageData.viewport?.width || 0}_${SEARCH_CONFIG.STAMP_WIDTH}_${SEARCH_CONFIG.STAMP_HEIGHT}`;
+      if (ocrCache.has(cacheKey)) return ocrCache.get(cacheKey);
+      const ocrStart = performance.now();
+      console.log(`🔍 OCR стр. ${pageData.page}...`);
+      const canvas = await cropAndPreprocessStamp(pageData);
+      const worker = await initTesseractWorker();
+      const { data } = await worker.recognize(canvas);
+      const lines = data.text.split("\n").map((l) => l.trim()).filter((l) => l.length > 1);
+      console.log(`✅ OCR стр.${pageData.page}: ${lines.length} строк за ${formatMs(performance.now() - ocrStart)}`, lines);
+      ocrCache.set(cacheKey, lines);
+      return lines;
+    }
+
+    function getStampRect(pageData, previewScale) {
+      const vw = pageData.viewport?.width || 0;
+      const vh = pageData.pageHeight || 0;
+      return {
+        x: (vw - SEARCH_CONFIG.STAMP_WIDTH) * previewScale,
+        y: (vh - SEARCH_CONFIG.STAMP_HEIGHT) * previewScale,
+        w: SEARCH_CONFIG.STAMP_WIDTH * previewScale,
+        h: SEARCH_CONFIG.STAMP_HEIGHT * previewScale,
+      };
+    }
+    function formatMs(ms) { return ms < 1000 ? `${ms}мс` : `${(ms / 1000).toFixed(2)}с`; }
+
+    // ★ Строка состояния поиска: обновляет статус-бар и прогресс-бар в реальном времени
+    function setSearchStatus(text, percent) {
+      const statusEl = document.getElementById("status");
+      if (statusEl) statusEl.innerHTML = text;
+      if (typeof percent === "number") showProgress(true, Math.max(0, Math.min(100, percent)));
+    }
+
+    function pageHasStamp(page) {
+      if (!page.words?.length) return false;
+      const allText = page.words.map(w => w.str).join(" ").toLowerCase();
+      for (const marker of STAMP_MARKERS) {
+        if (allText.includes(marker)) return true;
+      }
+      return false;
+    }
+
+    // ★ УСКОРЕНИЕ: проверка, что все записи справочника уже покрыты текстом
+    function allEntriesCovered(normalizedLines) {
+      if (!refEntriesNormalized.length) return true;
+      for (const c of refEntriesNormalized) {
+        let found = false;
+        for (const l of normalizedLines) {
+          if (l.lineNorm.includes(c.lastNameNorm)) { found = true; break; }
+        }
+        if (!found) return false;
+      }
+      return true;
+    }
+
+    // ======================= ОБЪЕДИНЁННАЯ ФУНКЦИЯ: ИЗВЛЕЧЬ + СРАВНИТЬ =======================
+    async function extractAndCompare() {
+      if (!pdfLoaded) { showToast("Загрузите PDF", "error"); return; }
+      const startTime = performance.now();
+      const pagesToSearch = pdfPages.filter(p => p.page !== SKIP_PAGE);
+      const searchBtn = document.getElementById("searchAndCompareBtn");
+      searchBtn.disabled = true;
+
+      // --- ЭТАП 1: ТЕКСТОВЫЙ СЛОЙ (только страницы со штампом) ---
+      extractedLinesGlobal = [];
+      const normalizedLines = [];
+      let pagesWithStamp = 0, pagesSkipped = 0;
+      let textStoppedEarly = false;
+      let ocrPagesUsed = 0;
+
+      try {
+        setSearchStatus("🔄 Поиск: сканирование текстового слоя...", 0);
+
+        for (let idx = 0; idx < pagesToSearch.length; idx++) {
+          const page = pagesToSearch[idx];
+          if (!page.words?.length) continue;
+          if (!pageHasStamp(page)) { pagesSkipped++; continue; }
+          pagesWithStamp++;
+          const linesMap = new Map();
+          for (const w of page.words) {
+            const yKey = Math.round(w.y / SEARCH_CONFIG.LINE_TOLERANCE);
+            if (!linesMap.has(yKey)) linesMap.set(yKey, []);
+            linesMap.get(yKey).push(w);
+          }
+          const sortedYKeys = Array.from(linesMap.keys()).sort((a, b) => a - b);
+          for (const yKey of sortedYKeys) {
+            const words = linesMap.get(yKey);
+            words.sort((a, b) => a.x - b.x);
+            const lineText = words.map((w) => w.str).join(" ");
+            if (lineText.trim().length > 0) {
+              const el = { text: lineText, source: "(текст)", page: page.page, pageData: page, lineNorm: normalizeTextSmart(lineText) };
+              extractedLinesGlobal.push(el);
+              normalizedLines.push(el);
+            }
+          }
+          setSearchStatus(`🔄 Текстовый слой: стр. ${page.page} (${idx + 1}/${pagesToSearch.length}), штампов найдено: ${pagesWithStamp}`, Math.round(((idx + 1) / pagesToSearch.length) * 40));
+          // ★ УСКОРЕНИЕ: как только все записи справочника найдены в текстовом слое,
+          // дальше страницы можно не сканировать (актуально для больших многостраничных PDF)
+          if (allEntriesCovered(normalizedLines)) { textStoppedEarly = true; break; }
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        if (textStoppedEarly) console.log("⏹ Ранняя остановка текстового слоя: все записи найдены");
+
+        // --- ЭТАП 1б: OCR ТОЛЬКО ЕСЛИ ТЕКСТ НЕ ПОКРЫЛ ВСЕ ЗАПИСИ ---
+        if (allEntriesCovered(normalizedLines)) {
+          console.log("⏩ OCR не требуется: все записи справочника найдены в текстовом слое");
+          setSearchStatus("⏩ Текстовый слой покрыл все записи, OCR пропущен", 85);
+        } else {
+          // ★ УСКОРЕНИЕ: штамп/общие данные обычно на последних листах комплекта, поэтому
+          // сканы без текстового слоя проверяем от конца документа к началу — так нужный
+          // лист чаще всего находится за 1 вызов OCR вместо перебора всех MAX_OCR_PAGES.
+          const scanPages = pagesToSearch.filter(p => !p.words?.length).reverse();
+          if (scanPages.length) setSearchStatus(`🔍 Подготовка OCR (кандидатов: ${scanPages.length})...`, 45);
+          for (const page of scanPages) {
+            if (ocrPagesUsed >= SEARCH_CONFIG.MAX_OCR_PAGES) break;
+            if (!page.pdfPage) continue;
+            setSearchStatus(`🔍 OCR стр. ${page.page} (попытка ${ocrPagesUsed + 1}/${SEARCH_CONFIG.MAX_OCR_PAGES})...`, 45 + Math.round((ocrPagesUsed / SEARCH_CONFIG.MAX_OCR_PAGES) * 40));
+            try {
+              const ocrLines = await ocrRecognizeStamp(page);
+              ocrPagesUsed++;
+              for (const line of ocrLines) {
+                if (line.trim().length > 0) {
+                  const el = { text: line, source: "(OCR)", page: page.page, pageData: page, lineNorm: normalizeTextSmart(line) };
+                  extractedLinesGlobal.push(el);
+                  normalizedLines.push(el);
+                }
+              }
+              if (allEntriesCovered(normalizedLines)) { console.log("⏹ Ранняя остановка OCR: все записи найдены"); break; }
+            } catch (err) { console.error(`❌ OCR ошибка стр. ${page.page}:`, err); }
+          }
+          // Фолбэк: если сканов не было, а текст никого не нашёл — пробуем последнюю страницу (растровый штамп)
+          const lastPage = pagesToSearch[pagesToSearch.length - 1];
+          if (ocrPagesUsed === 0 && lastPage?.pdfPage && lastPage.words?.length && !allEntriesCovered(normalizedLines)) {
+            setSearchStatus(`🔍 OCR стр. ${lastPage.page} (последняя страница)...`, 70);
+            try {
+              const ocrLines = await ocrRecognizeStamp(lastPage);
+              ocrPagesUsed++;
+              for (const line of ocrLines) {
+                if (line.trim().length > 0) {
+                  const el = { text: line, source: "(OCR)", page: lastPage.page, pageData: lastPage, lineNorm: normalizeTextSmart(line) };
+                  extractedLinesGlobal.push(el);
+                  normalizedLines.push(el);
+                }
+              }
+            } catch (err) { console.error(`❌ OCR ошибка стр. ${lastPage.page}:`, err); }
+          }
+        }
+
+        const extractElapsed = performance.now() - startTime;
+        console.log(`📋 Извлечено ${extractedLinesGlobal.length} строк (штамп: ${pagesWithStamp} стр., пропущено: ${pagesSkipped}, OCR: ${ocrPagesUsed} стр.) за ${formatMs(extractElapsed)}`);
+        renderExtractedText();
+
+        // --- ЭТАП 2: СРАВНЕНИЕ СО СПРАВОЧНИКОМ ---
+        setSearchStatus("📊 Сравнение со справочником...", 90);
+        // ★ УСКОРЕНИЕ: алиасы роли и варианты фамилии для fuzzy-сравнения берутся из кэша
+        // (refEntriesNormalized.roleAliasesRaw / nameVariantsRaw), посчитанного один раз в
+        // rebuildRefCache. Раньше getAllRoleAliases()/generateWordVariants() пересчитывались
+        // заново на КАЖДОЙ строке для каждой записи справочника — O(записи × строки) лишней
+        // работы. Теперь это O(записи) один раз плюс дешёвое сравнение строк.
+        const compareStart = performance.now();
+        const allFound = [];
+        for (const cached of refEntriesNormalized) {
+          for (const el of normalizedLines) {
+            const isOcr = el.source === "(OCR)";
+            const roleThreshold = isOcr ? SEARCH_CONFIG.FUZZY_OCR_ROLE : SEARCH_CONFIG.FUZZY_ROLE;
+            const nameThreshold = isOcr ? SEARCH_CONFIG.FUZZY_OCR_NAME : SEARCH_CONFIG.FUZZY_NAME;
+
+            let roleMatch = false;
+            for (const aliasNorm of cached.roleAliases) {
+              if (el.lineNorm.includes(aliasNorm)) { roleMatch = true; break; }
+            }
+            if (!roleMatch) {
+              for (const alias of cached.roleAliasesRaw) {
+                if (fuzzyMatch(el.text, alias, roleThreshold)) { roleMatch = true; break; }
+              }
+            }
+            if (!roleMatch) continue;
+
+            let nameMatch = false;
+            for (const variantNorm of cached.nameVariants) {
+              if (el.lineNorm.includes(variantNorm)) { nameMatch = true; break; }
+            }
+            if (!nameMatch) {
+              for (const variant of cached.nameVariantsRaw) {
+                if (fuzzyMatch(el.text, variant, nameThreshold)) { nameMatch = true; break; }
+              }
+            }
+            if (!nameMatch) continue;
+
+            let score = isOcr ? 55 : 70;
+            if (el.lineNorm.includes(cached.roleNorm)) score += isOcr ? 10 : 15;
+            if (el.lineNorm.includes(cached.lastNameNorm)) score += isOcr ? 10 : 15;
+            if (!isOcr && score < SEARCH_CONFIG.THRESHOLD) score = SEARCH_CONFIG.THRESHOLD;
+
+            allFound.push({
+              ...cached, found: true, type: isOcr ? "ocr-stamp" : "regular", source: el.source,
+              score, page: el.page, context: el.text,
+              matchedWords: [cached.role, cached.lastName], pageData: el.pageData,
+            });
+          }
+        }
+
+        const uniqueFound = [], seen = new Set();
+        allFound.forEach(item => { const key = `${item.org}-${item.role}-${item.lastName}`; if (!seen.has(key)) { seen.add(key); uniqueFound.push(item); } });
+        const compareElapsed = performance.now() - compareStart;
+        const totalElapsed = performance.now() - startTime;
+
+        iulRows = uniqueFound.length ? uniqueFound.map(e => ({ work: `${e.org} ${e.role}`, fio: capitalizeFirst(e.lastName) })) : [{ work: "", fio: "" }];
+        renderIulRows();
+        document.getElementById("iulObjectName").value = findBestObject(pdfPages, objectNames);
+        refreshIulPreview();
+        window.lastFoundEntries = uniqueFound;
+
+        let html = `<div class="search-stats"><span class="stat-item">Записей: ${refEntries.length}</span><span class="stat-item">Строк: ${extractedLinesGlobal.length}</span><span class="stat-item">Найдено: ${uniqueFound.length}</span><span class="stat-item">OCR стр.: ${ocrPagesUsed}</span><span class="stat-item">⏱ Всего: ${formatMs(totalElapsed)}</span></div>`;
+        html += `<div style="font-size:.75rem;color:#888;margin-bottom:.5rem">📌 Текст: ${pagesWithStamp} стр. со штампом, пропущено: ${pagesSkipped}</div>`;
+        if (!uniqueFound.length) html += '<div style="color:#666;padding:20px;">Ни одного совпадения не найдено.</div>';
+        else {
+          uniqueFound.forEach(e => {
+            const typeLabel = e.type === "ocr-stamp" ? " (OCR)" : " (текст)";
+            html += `<div class="result-item"><strong>${escapeHtml(e.org)}</strong> → <span class="badge">${escapeHtml(e.role)}</span> → ${escapeHtml(capitalizeFirst(e.lastName))}${typeLabel} <em style="font-size:.75rem;color:#888">${e.source}</em><div class="context-box"><div class="context-label">📄 Стр. ${e.page}:</div>${highlightMatches(e.context, e.matchedWords || [e.role, e.lastName])}</div></div>`;
+          });
+        }
+        document.getElementById("resultsContent").innerHTML = html;
+        document.getElementById("resultsCard").style.display = "block";
+        setSearchStatus(`✓ Готово: ${uniqueFound.length} совпадений за ${formatMs(totalElapsed)} (текст: ${pagesWithStamp} стр., OCR: ${ocrPagesUsed} стр.)`, 100);
+        showToast(`Готово за ${formatMs(totalElapsed)}: ${uniqueFound.length} совпадений, OCR: ${ocrPagesUsed} стр.`);
+      } finally {
+        searchBtn.disabled = false;
+        setTimeout(() => showProgress(false), 800);
+      }
+    }
+
+    function renderExtractedText() {
+      const container = document.getElementById("extractedTextArea");
+      const stats = document.getElementById("extractedStats");
+      const textCount = extractedLinesGlobal.filter(l => l.source === "(текст)").length;
+      const ocrCount = extractedLinesGlobal.filter(l => l.source === "(OCR)").length;
+      stats.textContent = `${extractedLinesGlobal.length} строк: ${textCount} текст + ${ocrCount} OCR`;
+      if (extractedLinesGlobal.length === 0) {
+        container.innerHTML = '<div style="color:#666;text-align:center;padding:20px;">Текст не найден</div>';
+      } else {
+        container.innerHTML = extractedLinesGlobal.map((el, idx) => {
+          const cssClass = el.source === "(OCR)" ? "from-ocr" : "from-text";
+          return `<div class="extracted-line ${cssClass}"><span class="extracted-meta">стр.${el.page} ${el.source}</span>${escapeHtml(el.text)}</div>`;
+        }).join("");
+      }
+      document.getElementById("extractedTextCard").style.display = "block";
+    }
+
+    // ======================= ПОИСК ОБЪЕКТА =======================
+    function findBestObject(pdfPages, objectNames) {
+      if (!objectNames.length) return pdfMeta.docName;
+      const pagesToSearch = pdfPages.filter((p) => p.page !== SKIP_PAGE).slice(0, 5);
+      let bestMatch = { name: pdfMeta.docName, score: 0 };
+      for (const page of pagesToSearch) {
+        if (!page.words?.length) continue;
+        const fullText = page.words.map((w) => w.str).join(" ").toLowerCase();
+        for (const obj of objectNames) {
+          const objLower = obj.toLowerCase();
+          if (fullText.includes(objLower)) return obj;
+          const objWords = objLower.split(/\s+/).filter((w) => w.length > 3);
+          let matches = 0;
+          for (const w of objWords) { if (fullText.includes(w)) matches++; }
+          const score = objWords.length ? matches / objWords.length : 0;
+          if (score > bestMatch.score && score >= 0.5) bestMatch = { name: obj, score: score };
+        }
+      }
+      return bestMatch.score > 0.5 ? bestMatch.name : pdfMeta.docName;
+    }
+
+    // ======================= УТИЛИТЫ =======================
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+    function capitalizeFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s; }
+    function showToast(msg, type = "info") {
+      const t = document.createElement("div"); t.className = "toast";
+      t.style.background = type === "error" ? "#dc3545" : "#1a1a1a";
+      t.innerText = msg; document.body.appendChild(t);
+      setTimeout(() => { t.style.opacity = "0"; t.style.transform = "translateX(50px)"; setTimeout(() => t.remove(), 300); }, 3000);
+    }
+    function formatBytes(b) { if (!b) return "0 Б"; const i = Math.floor(Math.log(b) / Math.log(1024)); return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + " " + ["Б", "КБ", "МБ", "ГБ"][i]; }
+    function formatDate(ts) { return ts ? new Date(ts).toLocaleString("ru-RU") : "—"; }
+    function crc32(arr) {
+      let crc = 0xffffffff; const view = new Uint8Array(arr); const table = new Array(256);
+      for (let i = 0; i < 256; i++) { let c = i; for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[i] = c; }
+      for (let i = 0; i < view.length; i++) crc = (crc >>> 8) ^ table[(crc ^ view[i]) & 0xff];
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+    function highlightMatches(text, terms) {
+      if (!terms?.length) return escapeHtml(text);
+      let res = escapeHtml(text);
+      [...new Set(terms)].sort((a, b) => b.length - a.length).forEach(term => {
+        const safe = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        res = res.replace(new RegExp(`(${safe})`, "gi"), '<span class="highlight-match">$1</span>');
+      });
+      return res;
+    }
+
+    // ======================= СОСТОЯНИЕ =======================
+    let pdfMeta = { crc32: "", fileName: "", fileSize: 0, lastModified: null, docNumber: "", docName: "" };
+    let pdfPages = [], pdfLoaded = false, pdfDocInstance = null;
+    let refEntries = [], objectNames = [], iulRows = [{ work: "", fio: "" }];
+
+    function saveData() { localStorage.setItem("spec_ref_entries", JSON.stringify(refEntries)); localStorage.setItem("spec_objects", JSON.stringify(objectNames)); }
+    function loadData() {
+      refEntries = localStorage.getItem("spec_ref_entries") ? JSON.parse(localStorage.getItem("spec_ref_entries")) : [
+        { id: 1, org: 'ООО "ДАРС-Реновация"', role: "ГИП", lastName: "Шишлянников" },
+        { id: 2, org: 'ООО "СтройПроект"', role: "Н.контроль", lastName: "Смирнов" },
+        { id: 3, org: 'ООО "СтройПроект"', role: "Разработал", lastName: "Каминская" },
+      ];
+      objectNames = localStorage.getItem("spec_objects") ? JSON.parse(localStorage.getItem("spec_objects")) : ["Строительство жилого дома", "Реконструкция школы", "Капитальный ремонт моста"];
+      saveData();
+      rebuildRefCache();
+    }
+
+    // ======================= UI РЕНДЕРИНГ =======================
+    function renderReferenceList() {
+      const c = document.getElementById("refListContainer");
+      c.innerHTML = refEntries.length === 0 ? '<div style="color:#666;padding:20px;text-align:center;">Нет записей</div>' : refEntries.map(e => `<div class="reference-item"><div style="flex:1"><strong>${escapeHtml(e.org)}</strong> → <span class="badge">${escapeHtml(e.role)}</span> → ${escapeHtml(capitalizeFirst(e.lastName))}</div><button class="btn btn-outline btn-sm" onclick="deleteRefEntry(${e.id})">🗑</button></div>`).join("");
+    }
+    window.deleteRefEntry = function (id) { refEntries = refEntries.filter(e => e.id !== id); saveData(); renderReferenceList(); rebuildRefCache(); showToast("Запись удалена"); };
+    function addRefEntryDialog() {
+      const org = prompt("Организация:"); if (!org) return;
+      const role = prompt("Роль:"); if (!role) return;
+      const lastName = prompt("Фамилия:"); if (!lastName) return;
+      refEntries.push({ id: Date.now(), org: org.trim(), role: role.trim(), lastName: lastName.trim().toLowerCase() });
+      saveData(); renderReferenceList(); rebuildRefCache(); showToast("Запись добавлена");
+    }
+    function renderObjects() {
+      const c = document.getElementById("objectsListContainer");
+      c.innerHTML = objectNames.map(o => `<div class="reference-item"><span>${escapeHtml(o)}</span><button class="btn btn-outline btn-sm" onclick="deleteObject('${escapeHtml(o)}')">🗑</button></div>`).join("");
+      document.getElementById("objectDatalist").innerHTML = objectNames.map(o => `<option value="${escapeHtml(o)}">`).join("");
+    }
+    window.deleteObject = function (name) {
+      objectNames = objectNames.filter(n => n !== name); saveData(); renderObjects();
+      if (document.getElementById("iulObjectName").value === name) document.getElementById("iulObjectName").value = "";
+      showToast("Объект удалён");
+    };
+    function addObject() {
+      const name = document.getElementById("newObjectName").value.trim();
+      if (name && !objectNames.includes(name)) { objectNames.push(name); saveData(); renderObjects(); showToast(`Объект "${name}" добавлен`); }
+      document.getElementById("newObjectName").value = "";
+    }
+    function addCurrentObject() {
+      const val = document.getElementById("iulObjectName").value.trim();
+      if (val && !objectNames.includes(val)) { objectNames.push(val); saveData(); renderObjects(); showToast(`Объект "${val}" сохранён`); }
+    }
+    function renderIulRows() {
+      const c = document.getElementById("iulRowsContainer");
+      c.innerHTML = iulRows.map((row, idx) => `<div class="flex-row" style="gap:.5rem"><input class="input-field" style="flex:2" value="${escapeHtml(row.work)}" onchange="window.updateIulRow(${idx},'work',this.value)"><input class="input-field" style="flex:1" value="${escapeHtml(row.fio)}" onchange="window.updateIulRow(${idx},'fio',this.value)"><button class="btn btn-outline btn-sm" onclick="window.removeIulRow(${idx})">✕</button></div>`).join("");
+      refreshIulPreview();
+    }
+    window.updateIulRow = function (idx, field, val) { iulRows[idx][field] = val; refreshIulPreview(); };
+    window.removeIulRow = function (idx) { iulRows.splice(idx, 1); if (!iulRows.length) iulRows = [{ work: "", fio: "" }]; renderIulRows(); };
+    function refreshIulPreview() {
+      const npp = document.getElementById("iulNpp").value, ver = document.getElementById("iulVersion").value;
+      const obj = document.getElementById("iulObjectName").value.trim() || pdfMeta.docName;
+      document.getElementById("iulPreview").innerHTML = generateIulHtml(pdfMeta, iulRows, obj, npp, ver);
+    }
+    function generateIulHtml(meta, rows, obj, npp, ver) {
+      let html = `<table style="width:100%;border-collapse:collapse;">`;
+      html += `<tr><th colspan="3">Наименование объекта</th><th colspan="7">${escapeHtml(obj)}</th></tr>`;
+      html += `<tr><th>№ п/п</th><th colspan="2">Обозначение документа</th><th colspan="5">Наименование документа</th><th colspan="2">Версия</th></tr>`;
+      html += `<tr><td>${escapeHtml(npp)}</td><td colspan="2">${escapeHtml(meta.docNumber)}</td><td colspan="5">${escapeHtml(meta.docName)}</td><td colspan="2">${escapeHtml(ver)}</td></tr>`;
+      html += `<tr><td colspan="3">CRC32</td><td colspan="7">${meta.crc32}</td></tr>`;
+      html += `<tr><td colspan="3">Наименование файла</td><td colspan="3">Дата изменения</td><td colspan="4">Размер, байт</td></tr>`;
+      html += `<tr><td colspan="3">${escapeHtml(meta.fileName)}</td><td colspan="3">${formatDate(meta.lastModified)}</td><td colspan="4">${meta.fileSize}</td></tr>`;
+      html += `<tr><th colspan="3">Характер работы</th><th colspan="2">ФИО</th><th colspan="2">Подпись</th><th colspan="3">Дата</th></tr>`;
+      rows.forEach(r => { html += `<tr><td colspan="3" style="text-align:left">${escapeHtml(r.work)}</td><td colspan="2">${escapeHtml(r.fio)}</td><td colspan="2"></td><td colspan="3"></td></tr>`; });
+      html += `<tr><td colspan="5">Информационно-удостоверяющий лист</td><td colspan="3">${meta.docNumber}_УЛ</td><td>Лист</td><td>Листов</td></tr>`;
+      html += `<tr><td colspan="5"></td><td colspan="3"></td><td>1</td><td>1</td></tr></table>`;
+      return html;
+    }
+
+    // ======================= СИНХРОНИЗАЦИЯ =======================
+    function exportAllData() {
+      const sync = { version: "1.0", exported: new Date().toISOString() };
+      if (document.getElementById("syncRef").checked) sync.refEntries = refEntries;
+      if (document.getElementById("syncObjects").checked) sync.objects = objectNames;
+      if (document.getElementById("syncMeta").checked) sync.settings = { pdfMeta, iulRows, npp: document.getElementById("iulNpp").value, ver: document.getElementById("iulVersion").value };
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(sync, null, 2)], { type: "application/json" }));
+      a.download = `spec_iul_backup_${new Date().toISOString().slice(0, 10)}.json`; a.click(); showToast("Бэкап скачан");
+    }
+    function importAllData(file) {
+      const st = document.getElementById("importStatus"); st.textContent = "🔄 Чтение...";
+      const r = new FileReader();
+      r.onload = e => {
+        try {
+          const d = JSON.parse(e.target.result);
+          if (d.refEntries) { refEntries = d.refEntries; renderReferenceList(); rebuildRefCache(); }
+          if (d.objects) { objectNames = d.objects; renderObjects(); }
+          if (d.settings) {
+            if (d.settings.pdfMeta) Object.assign(pdfMeta, d.settings.pdfMeta);
+            if (d.settings.iulRows) { iulRows = d.settings.iulRows; renderIulRows(); }
+            if (d.settings.npp) document.getElementById("iulNpp").value = d.settings.npp;
+            if (d.settings.ver) document.getElementById("iulVersion").value = d.settings.ver;
+          }
+          saveData(); refreshIulPreview(); st.textContent = "✅ Импорт выполнен!"; showToast("Данные импортированы");
+        } catch (err) { st.textContent = "❌ " + err.message; showToast("Ошибка", "error"); }
+      };
+      r.readAsText(file);
+    }
+    function resetAllData() { if (!confirm("⚠️ Удалить все данные?")) return; localStorage.clear(); location.reload(); }
+
+    // ======================= ЗАГРУЗКА PDF =======================
+    async function loadPDF(file) {
+      if (!file || file.type !== "application/pdf") { showToast("Требуется PDF", "error"); return false; }
+      document.getElementById("fileName").innerText = file.name;
+      document.getElementById("status").innerHTML = "🔄 Загрузка..."; showProgress(true, 0);
+      pdfMeta.fileName = file.name; pdfMeta.fileSize = file.size; pdfMeta.lastModified = file.lastModified;
+      let base = file.name.replace(/\.pdf$/i, ""); pdfMeta.docName = base; pdfMeta.docNumber = base;
+      const buf = await file.arrayBuffer();
+      pdfMeta.crc32 = crc32(buf).toString(16).toUpperCase().padStart(8, "0");
+      document.getElementById("fileInfoGrid").innerHTML = `<div>CRC32: ${pdfMeta.crc32}</div><div>Обозначение: ${escapeHtml(pdfMeta.docNumber)}</div><div>Наименование: ${escapeHtml(pdfMeta.docName)}</div><div>Дата: ${formatDate(pdfMeta.lastModified)}</div><div>Размер: ${formatBytes(pdfMeta.fileSize)}</div>`;
+      document.getElementById("fileInfoBlock").style.display = "block";
+      pdfDocInstance = await pdfjsLib.getDocument({ data: buf }).promise; pdfPages = [];
+      for (let i = 1; i <= pdfDocInstance.numPages; i++) {
+        document.getElementById("status").innerHTML = `🔄 Стр. ${i}/${pdfDocInstance.numPages}`;
+        if (i === SKIP_PAGE) { pdfPages.push({ page: i, words: [], pageHeight: 0, viewport: null, pdfPage: null }); showProgress(true, (i / pdfDocInstance.numPages) * 100); continue; }
+        const page = await pdfDocInstance.getPage(i), viewport = page.getViewport({ scale: 1 }), tc = await page.getTextContent();
+        pdfPages.push({ page: i, words: tc.items.map(it => ({ str: it.str, y: it.transform[5], x: it.transform[4], width: it.width || 5, height: 12 })), pageHeight: viewport.height, viewport, pdfPage: page });
+        showProgress(true, (i / pdfDocInstance.numPages) * 100);
+      }
+      pdfLoaded = true;
+      document.getElementById("status").innerHTML = `✓ PDF: ${pdfDocInstance.numPages} стр.`;
+      showProgress(false);
+      document.getElementById("searchAndCompareBtn").disabled = false;
+      document.getElementById("showOcrZoneBtn").disabled = false;
+      document.getElementById("zoneControlsCard").style.display = "block";
+      extractedLinesGlobal = [];
+      document.getElementById("extractedTextCard").style.display = "none";
+      document.getElementById("resultsCard").style.display = "none";
+      // ★ УСКОРЕНИЕ: прогреваем Tesseract-worker в фоне сразу после загрузки PDF, не дожидаясь
+      // клика по «Извлечь и сравнить». Инициализация (~1–3 с, скачивание rus.traineddata)
+      // проходит параллельно с тем, что пользователь смотрит на карточку файла — если OCR
+      // вообще понадобится, он стартует мгновенно вместо того чтобы ждать создания worker.
+      initTesseractWorker().catch(err => console.warn("Прогрев OCR worker не удался:", err));
+      return true;
+    }
+    function showProgress(show, perc = 0) {
+      const bar = document.getElementById("progressBar"), fill = document.getElementById("progressFill");
+      bar.style.display = show ? "block" : "none"; if (show) fill.style.width = perc + "%";
+    }
+
+    // ======================= ВИЗУАЛИЗАЦИЯ ЗОНЫ OCR =======================
+    async function showOcrZonePreview() {
+      if (!pdfLoaded) { showToast("Загрузите PDF", "error"); return; }
+      const lastPage = pdfPages[pdfPages.length - 1];
+      if (!lastPage || !lastPage.pdfPage) { showToast("Нет страницы для превью", "error"); return; }
+      const scale = 1.5;
+      const viewport = lastPage.viewport.clone({ scale });
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = viewport.width;
+      tempCanvas.height = viewport.height;
+      const ctx = tempCanvas.getContext("2d");
+      await lastPage.pdfPage.render({ canvasContext: ctx, viewport }).promise;
+      const rect = getStampRect(lastPage, scale);
+      ctx.fillStyle = "rgba(255,68,68,0.2)";
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.strokeStyle = "#ff4444";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 4]);
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#ff4444";
+      ctx.font = "bold 16px Inter,sans-serif";
+      ctx.fillText(`🔍 Зона OCR (${SEARCH_CONFIG.STAMP_WIDTH}×${SEARCH_CONFIG.STAMP_HEIGHT})`, rect.x + 5, rect.y + 25);
+      const dataUrl = tempCanvas.toDataURL("image/png");
+      const win = window.open("", "_blank", "width=900,height=700");
+      if (win) {
+        win.document.write(`<html><head><title>Зона OCR — стр. ${lastPage.page}</title><style>body{margin:0;background:#333;display:flex;justify-content:center;align-items:center;min-height:100vh}img{max-width:100%;max-height:100vh}</style></head><body><img src="${dataUrl}" alt="Зона OCR"/></body></html>`);
+        win.document.close();
+      } else {
+        showToast("Разрешите всплывающие окна для превью зоны", "error");
+      }
+    }
+
+    // ======================= DOCX =======================
+    async function generateDocxBlob(meta, rows, objName, npp, version) {
+      const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, VerticalAlign, BorderStyle, TableLayoutType } = docx;
+      const borders = { top: { style: BorderStyle.SINGLE, size: 1, color: "000000" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" }, left: { style: BorderStyle.SINGLE, size: 1, color: "000000" }, right: { style: BorderStyle.SINGLE, size: 1, color: "000000" } };
+      const cell = (text, opts = {}) => new TableCell({ columnSpan: opts.colSpan || 1, rowSpan: opts.rowSpan || 1, verticalAlign: VerticalAlign.CENTER, borders, margins: { top: 100, bottom: 100, left: 100, right: 100 }, children: [new Paragraph({ alignment: opts.align || AlignmentType.CENTER, spacing: { before: 0, after: 0, line: 240 }, children: [new TextRun({ text: String(text || ""), font: "Arial", size: 20, bold: !!opts.bold })] })] });
+      const tr = [
+        new TableRow({ children: [cell("Наименование объекта", { colSpan: 3, bold: true }), cell(objName, { colSpan: 7 })] }),
+        new TableRow({ children: [cell("№ п/п", { bold: true }), cell("Обозначение", { colSpan: 2, bold: true }), cell("Наименование", { colSpan: 5, bold: true }), cell("Версия", { colSpan: 2, bold: true })] }),
+        new TableRow({ children: [cell(npp), cell(meta.docNumber, { colSpan: 2 }), cell(meta.docName, { colSpan: 5 }), cell(version, { colSpan: 2 })] }),
+        new TableRow({ children: [cell("CRC32", { colSpan: 3, bold: true }), cell(meta.crc32, { colSpan: 7 })] }),
+        new TableRow({ children: [cell("Файл", { colSpan: 3, bold: true }), cell("Дата", { colSpan: 3, bold: true }), cell("Размер", { colSpan: 4, bold: true })] }),
+        new TableRow({ children: [cell(meta.fileName, { colSpan: 3 }), cell(formatDate(meta.lastModified), { colSpan: 3 }), cell(String(meta.fileSize), { colSpan: 4 })] }),
+        new TableRow({ children: [cell("Работа", { colSpan: 3, bold: true }), cell("ФИО", { colSpan: 2, bold: true }), cell("Подпись", { colSpan: 2, bold: true }), cell("Дата", { colSpan: 3, bold: true })] }),
+      ];
+      rows.forEach(r => tr.push(new TableRow({ height: { value: 600 }, children: [cell(r.work || "", { colSpan: 3, align: AlignmentType.LEFT }), cell(r.fio || "", { colSpan: 2 }), cell("", { colSpan: 2 }), cell("", { colSpan: 3 })] })));
+      tr.push(new TableRow({ children: [cell("Информационно-удостоверяющий лист", { colSpan: 5, rowSpan: 2, align: AlignmentType.LEFT }), cell(meta.docNumber + "_УЛ", { colSpan: 3, rowSpan: 2, align: AlignmentType.RIGHT }), cell("Лист", { bold: true }), cell("Листов", { bold: true })] }));
+      tr.push(new TableRow({ children: [cell("1", { bold: true }), cell("1", { bold: true })] }));
+      const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 } } }, children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 120 }, children: [new TextRun({ text: "ИУЛ", bold: true, font: "Arial", size: 22 })] }), new Table({ rows: tr, width: { size: 9638, type: WidthType.DXA }, layout: TableLayoutType.FIXED, alignment: AlignmentType.CENTER, columnWidths: [1134, 1134, 1247, 1247, 1247, 1247, 907, 907, 907, 1134] })] }] });
+      return await Packer.toBlob(doc);
+    }
+    async function downloadDocx() {
+      const blob = await generateDocxBlob(pdfMeta, iulRows, document.getElementById("iulObjectName").value.trim() || pdfMeta.docName, document.getElementById("iulNpp").value, document.getElementById("iulVersion").value);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `ИУЛ_${pdfMeta.docNumber}.docx`; a.click(); URL.revokeObjectURL(a.href); showToast("DOCX скачан");
+    }
+
+    // ======================= ИНИЦИАЛИЗАЦИЯ =======================
+    function init() {
+      loadData(); renderReferenceList(); renderObjects(); renderIulRows(); refreshIulPreview();
+      setInterval(() => { if (fuzzyCache.size > 2000) fuzzyCache.clear(); if (levCache.size > 2000) levCache.clear(); }, 60000);
+      document.querySelectorAll(".nav-btn").forEach(btn => btn.addEventListener("click", () => {
+        document.querySelectorAll(".page").forEach(p => p.classList.remove("active-page"));
+        document.getElementById(btn.dataset.page + "Page").classList.add("active-page");
+        document.querySelectorAll(".nav-btn").forEach(b => { b.classList.remove("active"); b.removeAttribute("aria-current"); });
+        btn.classList.add("active"); btn.setAttribute("aria-current", "page");
+        if (btn.dataset.page === "iul") refreshIulPreview();
+      }));
+      const drop = document.getElementById("dropZone"), inp = document.getElementById("fileInput");
+      drop.addEventListener("click", () => inp.click());
+      drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inp.click(); } });
+      drop.addEventListener("dragover", e => { e.preventDefault(); drop.style.borderColor = "var(--primary)"; });
+      drop.addEventListener("dragleave", () => drop.style.borderColor = "");
+      drop.addEventListener("drop", async e => { e.preventDefault(); drop.style.borderColor = ""; if (e.dataTransfer.files[0]) await loadPDF(e.dataTransfer.files[0]); });
+      inp.addEventListener("change", async e => { if (e.target.files[0]) await loadPDF(e.target.files[0]); });
+      document.getElementById("searchAndCompareBtn").addEventListener("click", extractAndCompare);
+      document.getElementById("showOcrZoneBtn").addEventListener("click", showOcrZonePreview);
+      document.getElementById("clearResultsBtn").addEventListener("click", () => document.getElementById("resultsCard").style.display = "none");
+      document.getElementById("addRefEntryBtn").addEventListener("click", addRefEntryDialog);
+      document.getElementById("exportRefBtn").addEventListener("click", () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(refEntries, null, 2)], { type: "application/json" })); a.download = "ref_entries.json"; a.click(); });
+      document.getElementById("importRefFile").addEventListener("change", e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = ev => { try { refEntries = JSON.parse(ev.target.result); saveData(); renderReferenceList(); rebuildRefCache(); showToast("Импорт справочника"); } catch { showToast("Ошибка", "error"); } }; r.readAsText(f); });
+      document.getElementById("addObjectBtn").addEventListener("click", addObject);
+      document.getElementById("exportObjectsBtn").addEventListener("click", () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(objectNames)], { type: "application/json" })); a.download = "objects.json"; a.click(); });
+      document.getElementById("importObjectsFile").addEventListener("change", e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = ev => { try { objectNames = JSON.parse(ev.target.result); saveData(); renderObjects(); showToast("Импорт объектов"); } catch { showToast("Ошибка", "error"); } }; r.readAsText(f); });
+      document.getElementById("addCurrentObjectBtn").addEventListener("click", addCurrentObject);
+      document.getElementById("resetObjectBtn").addEventListener("click", () => { document.getElementById("iulObjectName").value = pdfMeta.docName || ""; refreshIulPreview(); });
+      document.getElementById("refreshIulBtn").addEventListener("click", refreshIulPreview);
+      document.getElementById("downloadDocBtn").addEventListener("click", downloadDocx);
+      document.getElementById("addManualRowBtn").addEventListener("click", () => { iulRows.push({ work: "", fio: "" }); renderIulRows(); });
+      ["iulNpp", "iulVersion", "iulObjectName"].forEach(id => document.getElementById(id).addEventListener("input", refreshIulPreview));
+      document.getElementById("exportAllDataBtn").addEventListener("click", exportAllData);
+      document.getElementById("importAllDataFile").addEventListener("change", e => { if (e.target.files[0]) importAllData(e.target.files[0]); });
+      document.getElementById("resetAllDataBtn").addEventListener("click", resetAllData);
+      const widthSlider = document.getElementById("stampWidthSlider");
+      const heightSlider = document.getElementById("stampHeightSlider");
+      const widthValue = document.getElementById("stampWidthValue");
+      const heightValue = document.getElementById("stampHeightValue");
+      widthSlider.addEventListener("input", () => {
+        SEARCH_CONFIG.STAMP_WIDTH = parseInt(widthSlider.value);
+        widthValue.textContent = widthSlider.value;
+        ocrCache.clear();
+      });
+      heightSlider.addEventListener("input", () => {
+        SEARCH_CONFIG.STAMP_HEIGHT = parseInt(heightSlider.value);
+        heightValue.textContent = heightSlider.value;
+        ocrCache.clear();
+      });
+      document.getElementById("resetZoneBtn").addEventListener("click", () => {
+        SEARCH_CONFIG.STAMP_WIDTH = 550; SEARCH_CONFIG.STAMP_HEIGHT = 200;
+        widthSlider.value = 550; heightSlider.value = 200;
+        widthValue.textContent = "550"; heightValue.textContent = "200";
+        ocrCache.clear();
+        showToast("Зона сброшена к 550×200");
+      });
+
+      const objectSearchInput = document.getElementById("iulObjectSearch");
+      const objectSearchResults = document.getElementById("iulObjectSearchResults");
+      const objectSearchClearBtn = document.getElementById("iulObjectSearchClearBtn");
+      objectSearchInput.addEventListener("input", () => {
+        const query = objectSearchInput.value.trim().toLowerCase();
+        objectSearchClearBtn.style.display = query ? "inline-flex" : "none";
+        if (query.length < 1) { objectSearchResults.style.display = "none"; return; }
+        const matches = objectNames.filter(o =>
+          o.toLowerCase().includes(query) ||
+          normalizeTextSmart(o).includes(normalizeTextSmart(query))
+        );
+        if (matches.length === 0) {
+          objectSearchResults.innerHTML = '<div style="padding:.75rem;color:#666;font-size:.85rem">Ничего не найдено</div>';
+        } else {
+          objectSearchResults.innerHTML = matches.map(o =>
+            `<div class="iul-search-item" data-name="${escapeHtml(o)}"><span>${escapeHtml(o)}</span></div>`
+          ).join("");
+        }
+        objectSearchResults.style.display = "block";
+      });
+      objectSearchResults.addEventListener("click", (e) => {
+        const item = e.target.closest(".iul-search-item");
+        if (!item) return;
+        const name = item.dataset.name;
+        document.getElementById("iulObjectName").value = name;
+        refreshIulPreview();
+        objectSearchInput.value = "";
+        objectSearchResults.style.display = "none";
+        objectSearchClearBtn.style.display = "none";
+        showToast(`Объект выбран: ${name}`);
+      });
+      objectSearchClearBtn.addEventListener("click", () => {
+        objectSearchInput.value = "";
+        objectSearchResults.style.display = "none";
+        objectSearchClearBtn.style.display = "none";
+      });
+
+      const surnameInput = document.getElementById("iulSurnameSearch");
+      const searchResults = document.getElementById("iulSearchResults");
+      const searchClearBtn = document.getElementById("iulSearchClearBtn");
+      surnameInput.addEventListener("input", () => {
+        const query = surnameInput.value.trim().toLowerCase();
+        searchClearBtn.style.display = query ? "inline-flex" : "none";
+        if (query.length < 2) { searchResults.style.display = "none"; return; }
+        const matches = refEntries.filter(e =>
+          e.lastName.toLowerCase().includes(query) ||
+          normalizeTextSmart(e.lastName).includes(normalizeTextSmart(query))
+        );
+        if (matches.length === 0) {
+          searchResults.innerHTML = '<div style="padding:.75rem;color:#666;font-size:.85rem">Ничего не найдено</div>';
+        } else {
+          searchResults.innerHTML = matches.map(e =>
+            `<div class="iul-search-item" data-id="${e.id}"><span><strong>${escapeHtml(capitalizeFirst(e.lastName))}</strong> — ${escapeHtml(e.role)}</span><span class="org-name">${escapeHtml(e.org)}</span></div>`
+          ).join("");
+        }
+        searchResults.style.display = "block";
+      });
+      searchResults.addEventListener("click", (e) => {
+        const item = e.target.closest(".iul-search-item");
+        if (!item) return;
+        const id = parseInt(item.dataset.id);
+        const entry = refEntries.find(en => en.id === id);
+        if (!entry) return;
+        iulRows.push({ work: `${entry.org} ${entry.role}`, fio: capitalizeFirst(entry.lastName) });
+        renderIulRows();
+        surnameInput.value = "";
+        searchResults.style.display = "none";
+        searchClearBtn.style.display = "none";
+        showToast(`Добавлено: ${capitalizeFirst(entry.lastName)} (${entry.role})`);
+      });
+      searchClearBtn.addEventListener("click", () => {
+        surnameInput.value = "";
+        searchResults.style.display = "none";
+        searchClearBtn.style.display = "none";
+      });
+    }
+    window.addEventListener("DOMContentLoaded", () => {
+      if (typeof pdfjsLib === "undefined") { alert("PDF.js не загружен"); return; }
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      init();
+    });
+    // ★ Кнопки подписания (исправлено для GitHub Pages)
+    document.getElementById("signRdBtn").addEventListener("click", async () => {
+      const blob = await generateDocxBlob(
+        pdfMeta, iulRows,
+        document.getElementById("iulObjectName").value.trim() || pdfMeta.docName,
+        document.getElementById("iulNpp").value,
+        document.getElementById("iulVersion").value
+      );
+      const fileName = `ИУЛ_${pdfMeta.docNumber}.docx`;
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result.split(",")[1];
+        sessionStorage.setItem("signFiles", JSON.stringify([{
+          name: fileName,
+          data: base64,
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }]));
+        // ★ Относительный путь для GitHub Pages
+        window.open("./sign.html?mode=auto", "_blank");
+      };
+      reader.readAsDataURL(blob);
+    });
+
+    document.getElementById("signPdBtn").addEventListener("click", () => {
+      sessionStorage.removeItem("signFiles");
+      // ★ Относительный путь для GitHub Pages
+      window.open("./sign.html?mode=manual", "_blank");
+    });
+  </script>
+</body>
+
+</html>
