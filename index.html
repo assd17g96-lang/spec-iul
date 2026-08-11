@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spec IUL – Информационно-удостоверяющий лист</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root { --primary: #1a1a1a; --bg: #fafafa; --surface: #fff; --border: #ccc; --text: #1a1a1a; --text-secondary: #4a4a4a; --radius: 6px; --shadow: 0 2px 8px rgba(0,0,0,.06); --highlight: #fff3cd; --highlight-border: #ffc107 }
+    * { margin: 0; padding: 0; box-sizing: border-box }
+    body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6 }
+    .app-header { background: #1a1a1a; color: #fff; padding: 1.5rem 1rem; text-align: center; position: sticky; top: 0; z-index: 100 }
+    .app-header h1 { font-weight: 700; font-size: 2rem; letter-spacing: 4px; text-transform: uppercase; margin-bottom: .5rem }
+    .nav { display: flex; justify-content: center; gap: .5rem; margin-top: 1rem; flex-wrap: wrap }
+    .nav-btn { background: transparent; border: 1px solid rgba(255,255,255,.2); padding: .6rem 1.2rem; color: #fff; border-radius: 6px; cursor: pointer; transition: .2s; font-size: .85rem }
+    .nav-btn:hover { background: rgba(255,255,255,.1) }
+    .nav-btn.active { background: #fff; color: #1a1a1a; font-weight: 600 }
+    .app-container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem }
+    .page { display: none; animation: fadeIn .3s }
+    .page.active-page { display: block }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: translateY(0) } }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow) }
+    .card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; padding-bottom: .75rem; border-bottom: 2px solid var(--primary) }
+    .btn { padding: .5rem 1rem; border-radius: 6px; border: 1px solid var(--border); font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; transition: .2s; background: transparent }
+    .btn:hover { background: #f0f0f0 }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary) }
+    .btn-primary:hover { background: #333 }
+    .btn-success { background: #1a1a1a; color: #fff }
+    .btn-outline { border: 1px solid var(--border); color: var(--text-secondary) }
+    .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: #f5f5f5 }
+    .btn-sm { padding: .3rem .7rem; font-size: .8rem }
+    .input-field { width: 100%; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: .85rem; outline: none; background: #fff }
+    .input-field:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,0,0,.05) }
+    .flex-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center }
+    .file-drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 2rem; text-align: center; cursor: pointer; margin-bottom: 1rem; background: #fafafa; transition: .2s }
+    .file-drop:hover { border-color: var(--primary); background: #f0f0f0 }
+    .status-bar { background: #f8f8f8; padding: .75rem; border-left: 3px solid var(--primary); font-size: .85rem; margin: 1rem 0; font-family: monospace }
+    .progress-bar { height: 4px; background: var(--border); margin: .5rem 0; display: none; border-radius: 2px; overflow: hidden }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #1a1a1a, #4a4a4a); width: 0%; transition: width .3s }
+    .reference-item { background: #fff; padding: .75rem; margin-bottom: .5rem; border-left: 3px solid #ccc; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem }
+    .reference-item:hover { border-left-color: var(--primary) }
+    .badge { background: #1a1a1a; color: #fff; padding: .2rem .6rem; border-radius: 12px; font-size: .75rem }
+    .ref-search-wrapper { position: relative; margin-bottom: 1rem; }
+    .ref-search-wrapper input { padding-right: 2.5rem; }
+    .ref-search-clear { position: absolute; right: .5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1rem; color: #999; padding: .2rem .4rem; display: none; }
+    .ref-search-clear:hover { color: var(--primary); }
+    .ref-search-stats { font-size: .75rem; color: #888; margin-top: .3rem; display: none; }
+    .hl-match { background: var(--highlight); border: 1px solid var(--highlight-border); padding: 0 2px; border-radius: 2px; font-weight: 600; }
+    .result-item { background: #fff; padding: 10px; border-left: 3px solid #000; margin: 5px 0; border-radius: 4px }
+    .search-stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem }
+    .stat-item { background: #f0f0f0; padding: .3rem 1rem; border-radius: 20px; font-size: .85rem }
+    .toast { position: fixed; bottom: 1rem; right: 1rem; background: #1a1a1a; color: #fff; padding: .8rem 1.5rem; border-radius: 8px; z-index: 1100; animation: slideIn .3s }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(50px) } }
+    .iul-preview { background: #fff; padding: 1.5rem; border: 1px solid var(--border); overflow-x: auto; margin-top: 1rem; border-radius: var(--radius); box-shadow: var(--shadow) }
+    .iul-preview table { width: 100%; border-collapse: collapse; font-size: 8pt; font-family: "Courier New", monospace; table-layout: fixed }
+    .iul-preview th, .iul-preview td { border: 1px solid #000; padding: 6pt; text-align: center; vertical-align: middle; word-wrap: break-word }
+    .iul-preview th { background: #f5f5f5; font-weight: 600; text-transform: uppercase; font-size: 7pt }
+    .context-box { font-family: monospace; font-size: .8rem; background: #f9f9f9; padding: 8px; margin-top: 5px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; border: 1px solid #eee }
+    .context-label { font-weight: 600; font-size: .75rem; color: #666; margin-bottom: 4px }
+    .highlight-match { background: var(--highlight); border: 1px solid var(--highlight-border); padding: 2px 4px; border-radius: 3px; font-weight: 600 }
+    .sync-section { background: #f8f9fa; padding: 1rem; border-radius: var(--radius); margin: 1rem 0; border: 1px dashed var(--border) }
+    .sync-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .5rem; margin-top: .5rem }
+    .sync-item { display: flex; align-items: center; gap: .5rem; font-size: .85rem }
+    .sync-item input[type="checkbox"] { width: 16px; height: 16px }
+    .extracted-text-area { background: #f9f9f9; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin: 1rem 0; font-family: monospace; font-size: .8rem; line-height: 1.8; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all }
+    .extracted-line { padding: 2px 6px; border-radius: 3px; margin-bottom: 2px }
+    .extracted-line.from-text { border-left: 3px solid #2196F3 }
+    .extracted-line.from-ocr { border-left: 3px solid #FF9800 }
+    .extracted-meta { font-size: .7rem; color: #888; margin-right: 8px }
+    .zone-controls { background: #f0f4f8; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin: 1rem 0 }
+    .zone-controls label { display: flex; align-items: center; gap: .5rem; font-size: .85rem; margin-bottom: .5rem }
+    .zone-controls input[type="range"] { flex: 1; max-width: 200px }
+    .zone-controls .zone-value { font-family: monospace; font-weight: 600; min-width: 50px; text-align: right }
+    .iul-search-row { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; padding: .75rem; background: #f0f4f8; border-radius: var(--radius); border: 1px solid var(--border) }
+    .iul-search-row input { flex: 1 }
+    .iul-search-results { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); margin-top: .5rem; display: none }
+    .iul-search-item { padding: .5rem .75rem; cursor: pointer; border-bottom: 1px solid #eee; font-size: .85rem; display: flex; justify-content: space-between; align-items: center }
+    .iul-search-item:hover { background: #e8f0fe }
+    .iul-search-item:last-child { border-bottom: none }
+    .iul-search-item .org-name { color: #666; font-size: .75rem }
+    .nav-btn:focus, .btn:focus, .input-field:focus { outline: 2px solid var(--primary); outline-offset: 2px }
+    @media(max-width:768px) { .app-header h1 { font-size: 1.5rem } .nav-btn { padding: .4rem .8rem; font-size: .75rem } }
+  </style>
+</head>
+
+<body>
+  <header class="app-header">
+    <h1>Spec IUL</h1>
+    <div style="opacity:.7;font-size:.85rem;letter-spacing:2px">Информационно-удостоверяющий лист</div>
+    <nav class="nav">
+      <button class="nav-btn active" data-page="search">🔎 Поиск</button>
+      <button class="nav-btn" data-page="reference">📝 Справочник</button>
+      <button class="nav-btn" data-page="objects">🏗 Объекты</button>
+      <button class="nav-btn" data-page="iul">📄 ИУЛ</button>
+      <button class="nav-btn" data-page="sync">🔄 Синхр.</button>
+    </nav>
+  </header>
+
+  <div class="app-container">
+    <!-- ПОИСК -->
+    <div id="searchPage" class="page active-page">
+      <div class="card">
+        <div class="card-title">📄 Загрузка PDF</div>
+        <div id="dropZone" class="file-drop" tabindex="0">
+          <input type="file" id="fileInput" accept=".pdf" style="display:none" />
+          <div style="font-size:2rem">📁</div>
+          <span>Перетащите PDF или нажмите для выбора</span>
+          <div id="fileName" style="font-size:.8rem;margin-top:.5rem;color:#666"></div>
+        </div>
+        <div id="status" class="status-bar">⏳ Документ не загружен</div>
+        <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+        <div id="fileInfoBlock" style="display:none"><div class="file-info-grid" id="fileInfoGrid"></div></div>
+        <button id="searchAndCompareBtn" class="btn btn-success" style="width:100%;margin-top:.5rem" disabled>🔍 Извлечь текст и сравнить со справочником</button>
+        <button id="showOcrZoneBtn" class="btn btn-outline" style="width:100%;margin-top:.5rem" disabled>👁 Показать зону OCR на последней странице</button>
+      </div>
+      <div id="zoneControlsCard" class="card" style="display:none">
+        <div class="card-title"><span>⚙️ Настройка зоны поиска штампа</span><button id="resetZoneBtn" class="btn btn-outline btn-sm">↺ Сбросить</button></div>
+        <div class="zone-controls">
+          <label>Ширина зоны (px): <input type="range" id="stampWidthSlider" min="50" max="800" value="550" /><span class="zone-value" id="stampWidthValue">550</span></label>
+          <label>Высота зоны (px): <input type="range" id="stampHeightSlider" min="30" max="400" value="200" /><span class="zone-value" id="stampHeightValue">200</span></label>
+          <p style="font-size:.75rem;color:#666;margin-top:.5rem">Зона отсчитывается от правого нижнего угла страницы.</p>
+        </div>
+      </div>
+      <div id="extractedTextCard" class="card" style="display:none">
+        <div class="card-title"><span>📋 Извлечённый текст</span><span id="extractedStats" class="badge" style="font-size:.75rem"></span></div>
+        <div id="extractedTextArea" class="extracted-text-area"></div>
+      </div>
+      <div id="resultsCard" class="card" style="display:none">
+        <div class="card-title"><span>📊 Результаты сравнения</span><button id="clearResultsBtn" class="btn btn-outline btn-sm">✕ Очистить</button></div>
+        <div id="resultsContent"></div>
+      </div>
+    </div>
+
+    <!-- СПРАВОЧНИК -->
+    <div id="referencePage" class="page">
+      <div class="card">
+        <div class="card-title">
+          <span>📝 Справочник исполнителей</span>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <button id="addRefEntryBtn" class="btn btn-primary btn-sm">+ Добавить</button>
+            <button id="exportRefBtn" class="btn btn-outline btn-sm">📤 Экспорт</button>
+            <label class="btn btn-outline btn-sm" style="cursor:pointer;margin-bottom:0">📥 Импорт<input type="file" id="importRefFile" accept=".json" style="display:none" /></label>
+          </div>
+        </div>
+        <div class="ref-search-wrapper">
+          <input type="text" id="refSearchInput" class="input-field" placeholder="🔍 Поиск по фамилии, роли или организации..." autocomplete="off" />
+          <button id="refSearchClear" class="ref-search-clear" title="Очистить">✕</button>
+          <div id="refSearchStats" class="ref-search-stats"></div>
+        </div>
+        <div id="addRefFormCard" class="card" style="display:none;background:#f8f9fa;border-style:dashed;margin-top:0;margin-bottom:1rem">
+          <div class="card-title" style="font-size:1rem;border-bottom-color:#ccc">Новая запись</div>
+          <div class="flex-row" style="margin-bottom:.75rem">
+            <div style="flex:2"><label style="font-size:.8rem;color:#666;display:block;margin-bottom:.2rem">Организация</label><input type="text" id="newRefOrg" list="refOrgDatalist" class="input-field" /><datalist id="refOrgDatalist"></datalist></div>
+            <div style="flex:1"><label style="font-size:.8rem;color:#666;display:block;margin-bottom:.2rem">Роль</label><input type="text" id="newRefRole" list="refRoleDatalist" class="input-field" /><datalist id="refRoleDatalist"></datalist></div>
+            <div style="flex:1"><label style="font-size:.8rem;color:#666;display:block;margin-bottom:.2rem">Фамилия И.О.</label><input type="text" id="newRefLastName" class="input-field" /></div>
+          </div>
+          <div class="flex-row" style="justify-content:flex-end;gap:.5rem">
+            <button id="cancelAddRefBtn" class="btn btn-outline btn-sm">Отмена</button>
+            <button id="saveNewRefBtn" class="btn btn-primary btn-sm">💾 Сохранить</button>
+          </div>
+        </div>
+        <div id="refListContainer" style="max-height:500px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- ОБЪЕКТЫ -->
+    <div id="objectsPage" class="page">
+      <div class="card">
+        <div class="card-title"><span>🏗 Список объектов</span><div><button id="exportObjectsBtn" class="btn btn-outline btn-sm">📤 Экспорт</button><label class="btn btn-outline btn-sm" style="cursor:pointer">📥 Импорт<input type="file" id="importObjectsFile" accept=".json" style="display:none" /></label></div></div>
+        <div class="flex-row" style="margin-bottom:1rem"><input type="text" id="newObjectName" placeholder="Наименование объекта" class="input-field" style="flex:3" /><button id="addObjectBtn" class="btn btn-primary">+ Добавить</button></div>
+        <div id="objectsListContainer" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- ИУЛ -->
+    <div id="iulPage" class="page">
+      <div class="card">
+        <div class="card-title">
+          <span>📄 Информационно-удостоверяющий лист</span>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <button id="refreshIulBtn" class="btn btn-outline btn-sm">🔄 Обновить</button>
+            <button id="downloadDocBtn" class="btn btn-primary btn-sm">📥 Скачать DOCX</button>
+            <button id="signRdBtn" class="btn btn-success btn-sm">✍️ Подпись РД</button>
+            <button id="signPdBtn" class="btn btn-outline btn-sm">✍️ Подпись ПД</button>
+          </div>
+        </div>
+        <div class="flex-row" style="gap:1rem;margin-bottom:1rem">
+          <div style="flex:1"><label for="iulNpp">№ п/п:</label><input type="text" id="iulNpp" class="input-field" value="1" /></div>
+          <div style="flex:1"><label for="iulVersion">Версия:</label><input type="text" id="iulVersion" class="input-field" value="0" /></div>
+        </div>
+        <div><label for="iulObjectName">Наименование объекта:</label></div>
+        <div class="flex-row" style="margin-bottom:1rem">
+          <input type="text" id="iulObjectName" class="input-field" list="objectDatalist" placeholder="Выберите или введите" style="flex:4" />
+          <datalist id="objectDatalist"></datalist>
+          <button id="addCurrentObjectBtn" class="btn btn-outline btn-sm">💾 Сохранить</button>
+          <button id="resetObjectBtn" class="btn btn-outline btn-sm">↺ Сбросить</button>
+        </div>
+        <div class="iul-search-row"><span style="font-size:.85rem;white-space:nowrap">🔎 Объект:</span><input type="text" id="iulObjectSearch" class="input-field" placeholder="Поиск объекта..." style="flex:1" /><button id="iulObjectSearchClearBtn" class="btn btn-outline btn-sm" style="display:none">✕</button></div>
+        <div id="iulObjectSearchResults" class="iul-search-results"></div>
+        <div class="iul-search-row"><span style="font-size:.85rem;white-space:nowrap">🔎 Фамилия:</span><input type="text" id="iulSurnameSearch" class="input-field" placeholder="Поиск по справочнику..." style="flex:1" /><button id="iulSearchClearBtn" class="btn btn-outline btn-sm" style="display:none">✕</button></div>
+        <div id="iulSearchResults" class="iul-search-results"></div>
+        <div><label>Строки «Работа / ФИО»:</label></div>
+        <div id="iulRowsContainer" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem"></div>
+        <button id="addManualRowBtn" class="btn btn-outline btn-sm">+ Добавить строку вручную</button>
+        <div id="iulPreview" class="iul-preview" style="margin-top:1.5rem"></div>
+      </div>
+    </div>
+
+    <!-- СИНХРОНИЗАЦИЯ -->
+    <div id="syncPage" class="page">
+      <div class="card">
+        <div class="card-title">🔄 Синхронизация данных</div>
+        <div class="sync-section"><strong>📦 Экспорт</strong><div class="sync-grid"><label class="sync-item"><input type="checkbox" id="syncRef" checked /> 📝 Справочник</label><label class="sync-item"><input type="checkbox" id="syncObjects" checked /> 🏗 Объекты</label><label class="sync-item"><input type="checkbox" id="syncMeta" checked /> ⚙️ Настройки</label></div><button id="exportAllDataBtn" class="btn btn-primary" style="margin-top:1rem">📥 Скачать бэкап</button></div>
+        <div class="sync-section"><strong>📤 Импорт</strong><label class="btn btn-outline" style="cursor:pointer;width:fit-content">📁 Выбрать файл<input type="file" id="importAllDataFile" accept=".json" style="display:none" /></label><p id="importStatus" style="font-size:.8rem;margin-top:.5rem"></p></div>
+        <div class="sync-section"><strong>🗑 Сброс</strong><button id="resetAllDataBtn" class="btn btn-outline" style="border-color:#dc3545;color:#dc3545">⚠️ Сбросить всё</button></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ======================= НАСТРОЙКИ =======================
+    const SKIP_PAGE = 2;
+    const SEARCH_CONFIG = { THRESHOLD:45, FUZZY_NAME:0.7, FUZZY_ROLE:0.65, LINE_TOLERANCE:8, FUZZY_OCR_NAME:0.55, FUZZY_OCR_ROLE:0.5, STAMP_WIDTH:550, STAMP_HEIGHT:200, OCR_SCALE:2, OCR_CONTRAST_BOOST:40, MAX_OCR_PAGES:3 };
+    const STAMP_MARKERS = ["разработал","разраб","проверил","провер","н.контроль","н.контр","нормоконтроль","норм. контроль","гип","г.и.п.","главный инженер","утвердил","утверждаю","согласовал","согласовано","лист","листов","инв. № подл.","подп. и дата","взам. инв. №","инв. № дубл."];
+    let fuzzyCache=new Map(), levCache=new Map(), ocrCache=new Map();
+    let tesseractWorker=null, tesseractWorkerPromise=null;
+    let extractedLinesGlobal=[], refEntriesNormalized=[];
+
+    function rebuildRefCache() {
+      refEntriesNormalized = refEntries.map(e => {
+        const roleAliasesRaw=getAllRoleAliases(e.role), nameVariantsRaw=generateWordVariants(e.lastName);
+        return {...e, roleAliasesRaw, nameVariantsRaw, roleAliases:roleAliasesRaw.map(a=>normalizeTextSmart(a)), nameVariants:nameVariantsRaw.map(v=>normalizeTextSmart(v)), roleNorm:normalizeTextSmart(e.role), lastNameNorm:normalizeTextSmart(e.lastName)};
+      });
+    }
+    function normalizeText(t=""){return t.toLowerCase().replace(/ё/g,"е").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim();}
+    function normalizeTextSmart(t=""){let r=t.toLowerCase().replace(/ё/g,"е").replace(/[^\p{L}\p{N}\s]/gu," ");r=r.replace(/(\p{L})\s+(\p{L})/gu,"$1$2");r=r.replace(/(\p{L})\s+(\p{L})/gu,"$1$2");r=r.replace(/(\p{L})\s+(\p{L})/gu,"$1$2");return r.replace(/\s+/g," ").trim();}
+    function levenshtein(a,b){const k=`${a}|${b}`;if(levCache.has(k))return levCache.get(k);if(a===b){levCache.set(k,0);return 0;}const m=[];for(let i=0;i<=b.length;i++)m[i]=[i];for(let j=0;j<=a.length;j++)m[0][j]=j;for(let i=1;i<=b.length;i++)for(let j=1;j<=a.length;j++){if(b[i-1]===a[j-1])m[i][j]=m[i-1][j-1];else m[i][j]=Math.min(m[i-1][j-1]+1,m[i][j-1]+1,m[i-1][j]+1);}const r=m[b.length][a.length];levCache.set(k,r);return r;}
+    function fuzzyMatch(s1,s2,th=0.7){const k=`${s1}|${s2}|${th}`;if(fuzzyCache.has(k))return fuzzyCache.get(k);const a=normalizeText(s1),b=normalizeText(s2);if(a===b){fuzzyCache.set(k,true);return true;}if(!a.length||!b.length){fuzzyCache.set(k,false);return false;}const sim=1-levenshtein(a,b)/Math.max(a.length,b.length);const r=sim>=th;fuzzyCache.set(k,r);return r;}
+    function generateWordVariants(w){w=w.toLowerCase().trim();if(w.length<2)return[w];const v=new Set([w]);const ns=w.replace(/\s+/g,"");if(ns!==w&&ns.length>=2)v.add(ns);const ends=["а","у","ой","е","ы","ым","ом","ого","ому"];let st=w;for(const e of ends)if(w.endsWith(e)&&w.length>e.length+2){st=w.slice(0,-e.length);break;}for(const e of ends){const x=st+e;if(x.length>=3)v.add(x);}if(ns!==w){let sn=ns;for(const e of ends)if(ns.endsWith(e)&&ns.length>e.length+2){sn=ns.slice(0,-e.length);break;}for(const e of ends){const x=sn+e;if(x.length>=3)v.add(x);}}return Array.from(v);}
+    function getAllRoleAliases(role){const raw=role.toLowerCase().trim();const aliases=new Set([raw,raw.replace(/\./g,"").replace(/\s+/g,"")]);const words=raw.split(/\s+/);if(words.length>=2){aliases.add(words.map(w=>w[0]).join(""));aliases.add(words.map(w=>w.slice(0,3)).join(""));}if(words.length===1&&raw.length>3){aliases.add(raw.slice(0,4));aliases.add(raw.slice(0,4)+".");}const map={"н.контроль":["н.контроль","н.контр","н/контр","н. контр","н.контр.","норм. контроль","нормоконтроль"],гип:["гип","г.и.п.","главный инженер проекта","гл. инженер"],разработал:["разработал","разраб.","разраб","разраб ."],проверил:["проверил","провер.","провер"],"генеральный директор":["генеральный директор","ген. директор","гендир","директор"]};for(const[k,vals]of Object.entries(map))if(raw===k||aliases.has(k.replace(/\./g,"").replace(/\s+/g,"")))vals.forEach(v=>aliases.add(v));if(raw.includes("контроль")||raw.includes("контр")){aliases.add("н.контроль");aliases.add("нормоконтроль");}return Array.from(aliases);}
+
+    // ======================= TESSERACT =======================
+    async function initTesseractWorker(){if(tesseractWorker)return tesseractWorker;if(tesseractWorkerPromise)return tesseractWorkerPromise;tesseractWorkerPromise=(async()=>{console.log("🔧 Init Tesseract...");const s=performance.now();const w=await Tesseract.createWorker("rus",1,{logger:()=>{}});try{await w.setParameters({tessedit_pageseg_mode:"6"})}catch(e){}console.log(`✅ Ready ${formatMs(performance.now()-s)}`);tesseractWorker=w;return w;})();return tesseractWorkerPromise;}
+    async function cropAndPreprocessStamp(pd){const{pdfPage,viewport}=pd;const rs=viewport.width<=1000?2:1;const fv=pdfPage.getViewport({scale:rs});const fc=document.createElement("canvas");fc.width=fv.width;fc.height=fv.height;const fx=fc.getContext("2d");fx.fillStyle="#fff";fx.fillRect(0,0,fc.width,fc.height);await pdfPage.render({canvasContext:fx,viewport:fv}).promise;const sx=Math.max(0,fc.width-SEARCH_CONFIG.STAMP_WIDTH*rs);const sy=Math.max(0,fc.height-SEARCH_CONFIG.STAMP_HEIGHT*rs);const sw=Math.min(SEARCH_CONFIG.STAMP_WIDTH*rs,fc.width-sx);const sh=Math.min(SEARCH_CONFIG.STAMP_HEIGHT*rs,fc.height-sy);const ow=Math.round(sw*(SEARCH_CONFIG.OCR_SCALE/rs));const oh=Math.round(sh*(SEARCH_CONFIG.OCR_SCALE/rs));const oc=document.createElement("canvas");oc.width=ow;oc.height=oh;const cx=oc.getContext("2d");cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality="high";cx.drawImage(fc,sx,sy,sw,sh,0,0,ow,oh);const id=cx.getImageData(0,0,ow,oh);const d=id.data;const b=SEARCH_CONFIG.OCR_CONTRAST_BOOST;for(let i=0;i<d.length;i+=4){const avg=(d[i]+d[i+1]+d[i+2])/3;const val=avg<128?Math.max(0,avg-b):Math.min(255,avg+b);d[i]=val;d[i+1]=val;d[i+2]=val;}cx.putImageData(id,0,0);return oc;}
+    async function ocrRecognizeStamp(pd){const ck=`${pd.page}_${pd.viewport?.width||0}_${SEARCH_CONFIG.STAMP_WIDTH}_${SEARCH_CONFIG.STAMP_HEIGHT}`;if(ocrCache.has(ck))return ocrCache.get(ck);const cv=await cropAndPreprocessStamp(pd);const w=await initTesseractWorker();const{data}=await w.recognize(cv);const lines=data.text.split("\n").map(l=>l.trim()).filter(l=>l.length>1);ocrCache.set(ck,lines);return lines;}
+    function getStampRect(pd,ps){const vw=pd.viewport?.width||0,vh=pd.pageHeight||0;return{x:(vw-SEARCH_CONFIG.STAMP_WIDTH)*ps,y:(vh-SEARCH_CONFIG.STAMP_HEIGHT)*ps,w:SEARCH_CONFIG.STAMP_WIDTH*ps,h:SEARCH_CONFIG.STAMP_HEIGHT*ps};}
+    function formatMs(ms){return ms<1000?`${ms}мс`:`${(ms/1000).toFixed(2)}с`;}
+    function setSearchStatus(t,p){const el=document.getElementById("status");if(el)el.innerHTML=t;if(typeof p==="number")showProgress(true,Math.max(0,Math.min(100,p)));}
+    function pageHasStamp(p){if(!p.words?.length)return false;const t=p.words.map(w=>w.str).join(" ").toLowerCase();for(const m of STAMP_MARKERS)if(t.includes(m))return true;return false;}
+    function allEntriesCovered(nl){if(!refEntriesNormalized.length)return true;for(const c of refEntriesNormalized){let f=false;for(const l of nl)if(l.lineNorm.includes(c.lastNameNorm)){f=true;break;}if(!f)return false;}return true;}
+
+    // ======================= EXTRACT & COMPARE =======================
+    async function extractAndCompare(){if(!pdfLoaded){showToast("Загрузите PDF","error");return;}const st=performance.now();const pts=pdfPages.filter(p=>p.page!==SKIP_PAGE);const btn=document.getElementById("searchAndCompareBtn");btn.disabled=true;extractedLinesGlobal=[];const nl=[];let pws=0,psk=0,tse=false,opu=0;try{setSearchStatus("🔄 Сканирование текста...",0);for(let i=0;i<pts.length;i++){const p=pts[i];if(!p.words?.length)continue;if(!pageHasStamp(p)){psk++;continue;}pws++;const lm=new Map();for(const w of p.words){const yk=Math.round(w.y/SEARCH_CONFIG.LINE_TOLERANCE);if(!lm.has(yk))lm.set(yk,[]);lm.get(yk).push(w);}for(const yk of Array.from(lm.keys()).sort((a,b)=>a-b)){const ws=lm.get(yk);ws.sort((a,b)=>a.x-b.x);const lt=ws.map(w=>w.str).join(" ");if(lt.trim().length>0){const el={text:lt,source:"(текст)",page:p.page,pageData:p,lineNorm:normalizeTextSmart(lt)};extractedLinesGlobal.push(el);nl.push(el);}}setSearchStatus(`🔄 Текст: стр.${p.page} (${i+1}/${pts.length})`,Math.round(((i+1)/pts.length)*40));if(allEntriesCovered(nl)){tse=true;break;}await new Promise(r=>setTimeout(r,0));}if(allEntriesCovered(nl))setSearchStatus("⏩ OCR пропущен",85);else{const sp=pts.filter(p=>!p.words?.length).reverse();for(const p of sp){if(opu>=SEARCH_CONFIG.MAX_OCR_PAGES)break;if(!p.pdfPage)continue;setSearchStatus(`🔍 OCR стр.${p.page}...`,45+Math.round((opu/SEARCH_CONFIG.MAX_OCR_PAGES)*40));try{const ol=await ocrRecognizeStamp(p);opu++;for(const l of ol)if(l.trim().length>0){const el={text:l,source:"(OCR)",page:p.page,pageData:p,lineNorm:normalizeTextSmart(l)};extractedLinesGlobal.push(el);nl.push(el);}if(allEntriesCovered(nl))break;}catch(e){console.error(e);}}const lp=pts[pts.length-1];if(opu===0&&lp?.pdfPage&&lp.words?.length&&!allEntriesCovered(nl)){try{const ol=await ocrRecognizeStamp(lp);opu++;for(const l of ol)if(l.trim().length>0){const el={text:l,source:"(OCR)",page:lp.page,pageData:lp,lineNorm:normalizeTextSmart(l)};extractedLinesGlobal.push(el);nl.push(el);}}catch(e){}}}renderExtractedText();setSearchStatus("📊 Сравнение...",90);const cs=performance.now();const af=[];for(const c of refEntriesNormalized)for(const el of nl){const io=el.source==="(OCR)";const rt=io?SEARCH_CONFIG.FUZZY_OCR_ROLE:SEARCH_CONFIG.FUZZY_ROLE;const nt=io?SEARCH_CONFIG.FUZZY_OCR_NAME:SEARCH_CONFIG.FUZZY_NAME;let rm=false;for(const a of c.roleAliases)if(el.lineNorm.includes(a)){rm=true;break;}if(!rm)for(const a of c.roleAliasesRaw)if(fuzzyMatch(el.text,a,rt)){rm=true;break;}if(!rm)continue;let nm=false;for(const v of c.nameVariants)if(el.lineNorm.includes(v)){nm=true;break;}if(!nm)for(const v of c.nameVariantsRaw)if(fuzzyMatch(el.text,v,nt)){nm=true;break;}if(!nm)continue;let sc=io?55:70;if(el.lineNorm.includes(c.roleNorm))sc+=io?10:15;if(el.lineNorm.includes(c.lastNameNorm))sc+=io?10:15;if(!io&&sc<SEARCH_CONFIG.THRESHOLD)sc=SEARCH_CONFIG.THRESHOLD;af.push({...c,found:true,type:io?"ocr-stamp":"regular",source:el.source,score:sc,page:el.page,context:el.text,matchedWords:[c.role,c.lastName],pageData:el.pageData});}const uf=[],seen=new Set();af.forEach(i=>{const k=`${i.org}-${i.role}-${i.lastName}`;if(!seen.has(k)){seen.add(k);uf.push(i);}});const te=performance.now()-st;iulRows=uf.length?uf.map(e=>({work:`${e.org} ${e.role}`,fio:capitalizeFirst(e.lastName)})):[{work:"",fio:""}];renderIulRows();document.getElementById("iulObjectName").value=findBestObject(pdfPages,objectNames);refreshIulPreview();window.lastFoundEntries=uf;let html=`<div class="search-stats"><span class="stat-item">Записей:${refEntries.length}</span><span class="stat-item">Строк:${extractedLinesGlobal.length}</span><span class="stat-item">Найдено:${uf.length}</span><span class="stat-item">⏱${formatMs(te)}</span></div>`;if(!uf.length)html+='<div style="color:#666;padding:20px;">Нет совпадений.</div>';else uf.forEach(e=>{html+=`<div class="result-item"><strong>${escapeHtml(e.org)}</strong> → <span class="badge">${escapeHtml(e.role)}</span> → ${escapeHtml(capitalizeFirst(e.lastName))} ${e.type==="ocr-stamp"?"(OCR)":"(текст)"}<div class="context-box"><div class="context-label">📄 Стр.${e.page}:</div>${highlightMatches(e.context,e.matchedWords)}</div></div>`;});document.getElementById("resultsContent").innerHTML=html;document.getElementById("resultsCard").style.display="block";setSearchStatus(`✓ Готово: ${uf.length} за ${formatMs(te)}`,100);showToast(`Готово: ${uf.length} совпадений`);}finally{btn.disabled=false;setTimeout(()=>showProgress(false),800);}}
+    function renderExtractedText(){const c=document.getElementById("extractedTextArea");const s=document.getElementById("extractedStats");const tc=extractedLinesGlobal.filter(l=>l.source==="(текст)").length;const oc=extractedLinesGlobal.filter(l=>l.source==="(OCR)").length;s.textContent=`${extractedLinesGlobal.length}: ${tc} текст + ${oc} OCR`;c.innerHTML=extractedLinesGlobal.length===0?'<div style="color:#666;text-align:center;padding:20px;">Пусто</div>':extractedLinesGlobal.map(el=>`<div class="extracted-line ${el.source==="(OCR)"?"from-ocr":"from-text"}"><span class="extracted-meta">стр.${el.page} ${el.source}</span>${escapeHtml(el.text)}</div>`).join("");document.getElementById("extractedTextCard").style.display="block";}
+    function findBestObject(pp,on){if(!on.length)return pdfMeta.docName;const ps=pp.filter(p=>p.page!==SKIP_PAGE).slice(0,5);let bm={name:pdfMeta.docName,score:0};for(const p of ps){if(!p.words?.length)continue;const ft=p.words.map(w=>w.str).join(" ").toLowerCase();for(const o of on){const ol=o.toLowerCase();if(ft.includes(ol))return o;const ow=ol.split(/\s+/).filter(w=>w.length>3);let m=0;for(const w of ow)if(ft.includes(w))m++;const sc=ow.length?m/ow.length:0;if(sc>bm.score&&sc>=0.5)bm={name:o,score:sc};}}return bm.score>0.5?bm.name:pdfMeta.docName;}
+
+    // ======================= UTILS =======================
+    function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+    function capitalizeFirst(s){return s?s.charAt(0).toUpperCase()+s.slice(1).toLowerCase():s;}
+    function showToast(m,t="info"){const d=document.createElement("div");d.className="toast";d.style.background=t==="error"?"#dc3545":"#1a1a1a";d.innerText=m;document.body.appendChild(d);setTimeout(()=>{d.style.opacity="0";d.style.transform="translateX(50px)";setTimeout(()=>d.remove(),300);},3000);}
+    function formatBytes(b){if(!b)return"0 Б";const i=Math.floor(Math.log(b)/Math.log(1024));return parseFloat((b/Math.pow(1024,i)).toFixed(2))+" "+"Б КБ МБ ГБ".split(" ")[i];}
+    function formatDate(ts){return ts?new Date(ts).toLocaleString("ru-RU"):"—";}
+    function crc32(arr){let crc=0xffffffff;const view=new Uint8Array(arr);const table=new Array(256);for(let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=c&1?0xedb88320^(c>>>1):c>>>1;table[i]=c;}for(let i=0;i<view.length;i++)crc=(crc>>>8)^table[(crc^view[i])&0xff];return(crc^0xffffffff)>>>0;}
+    function highlightMatches(text,terms){if(!terms?.length)return escapeHtml(text);let res=escapeHtml(text);[...new Set(terms)].sort((a,b)=>b.length-a.length).forEach(term=>{const safe=term.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");res=res.replace(new RegExp(`(${safe})`,"gi"),'<span class="highlight-match">$1</span>');});return res;}
+    function highlightSearchTerm(text,query){if(!query)return escapeHtml(text);const escaped=escapeHtml(text);const safeQ=query.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");return escaped.replace(new RegExp(`(${safeQ})`,"gi"),'<span class="hl-match">$1</span>');}
+
+    // ======================= STATE =======================
+    let pdfMeta={crc32:"",fileName:"",fileSize:0,lastModified:null,docNumber:"",docName:""};
+    let pdfPages=[],pdfLoaded=false,pdfDocInstance=null;
+    let refEntries=[],objectNames=[],iulRows=[{work:"",fio:""}];
+    let refSearchQuery="";
+
+    function saveData(){localStorage.setItem("spec_ref_entries",JSON.stringify(refEntries));localStorage.setItem("spec_objects",JSON.stringify(objectNames));}
+    function loadData(){refEntries=localStorage.getItem("spec_ref_entries")?JSON.parse(localStorage.getItem("spec_ref_entries")):[{id:1,org:'ООО "ДАРС-Реновация"',role:"ГИП",lastName:"Шишлянников"},{id:2,org:'ООО "СтройПроект"',role:"Н.контроль",lastName:"Смирнов"},{id:3,org:'ООО "СтройПроект"',role:"Разработал",lastName:"Каминская"}];objectNames=localStorage.getItem("spec_objects")?JSON.parse(localStorage.getItem("spec_objects")):["Строительство жилого дома","Реконструкция школы","Капитальный ремонт моста"];saveData();rebuildRefCache();}
+
+    // ======================= REFERENCE UI =======================
+    function renderReferenceList(){const c=document.getElementById("refListContainer");const q=normalizeTextSmart(refSearchQuery);const filtered=q?refEntries.filter(e=>normalizeTextSmart(e.lastName).includes(q)||normalizeTextSmart(e.role).includes(q)||normalizeTextSmart(e.org).includes(q)):refEntries;const statsEl=document.getElementById("refSearchStats");const clearBtn=document.getElementById("refSearchClear");if(refSearchQuery){statsEl.style.display="block";statsEl.textContent=`Найдено: ${filtered.length} из ${refEntries.length}`;clearBtn.style.display="block";}else{statsEl.style.display="none";clearBtn.style.display="none";}if(filtered.length===0){c.innerHTML=refSearchQuery?`<div style="color:#666;padding:20px;text-align:center;">По запросу «${escapeHtml(refSearchQuery)}» ничего не найдено</div>`:'<div style="color:#666;padding:20px;text-align:center;">Нет записей</div>';return;}c.innerHTML=filtered.map(e=>{const orgHtml=highlightSearchTerm(e.org,refSearchQuery);const roleHtml=highlightSearchTerm(e.role,refSearchQuery);const nameHtml=highlightSearchTerm(capitalizeFirst(e.lastName),refSearchQuery);return `<div class="reference-item"><div style="flex:1"><strong>${orgHtml}</strong> <span style="color:#888;margin:0 .3rem">→</span> <span class="badge">${roleHtml}</span> <span style="color:#888;margin:0 .3rem">→</span> ${nameHtml}</div><button class="btn btn-outline btn-sm" onclick="deleteRefEntry(${e.id})" title="Удалить">🗑</button></div>`;}).join("");updateRefDatalists();}
+    function updateRefDatalists(){const orgs=new Set(refEntries.map(e=>e.org));const roles=new Set(refEntries.map(e=>e.role));document.getElementById("refOrgDatalist").innerHTML=Array.from(orgs).sort().map(o=>`<option value="${escapeHtml(o)}">`).join("");document.getElementById("refRoleDatalist").innerHTML=Array.from(roles).sort().map(r=>`<option value="${escapeHtml(r)}">`).join("");}
+    window.deleteRefEntry=function(id){if(!confirm("Удалить?"))return;refEntries=refEntries.filter(e=>e.id!==id);saveData();renderReferenceList();rebuildRefCache();showToast("Удалено");};
+    function showAddRefForm(){document.getElementById("addRefFormCard").style.display="block";document.getElementById("newRefOrg").focus();updateRefDatalists();}
+    function hideAddRefForm(){document.getElementById("addRefFormCard").style.display="none";["newRefOrg","newRefRole","newRefLastName"].forEach(id=>document.getElementById(id).value="");}
+    function saveNewRefEntry(){const org=document.getElementById("newRefOrg").value.trim();const role=document.getElementById("newRefRole").value.trim();const lastName=document.getElementById("newRefLastName").value.trim();if(!org||!role||!lastName){showToast("Заполните все поля","error");return;}if(isRefDuplicate(org,role,lastName)){showToast("Уже есть в справочнике","error");return;}refEntries.push({id:Date.now(),org,role,lastName:lastName.toLowerCase()});saveData();renderReferenceList();rebuildRefCache();hideAddRefForm();showToast(`✅ Добавлено: ${capitalizeFirst(lastName)}`);}
+    function isRefDuplicate(org, role, lastName) {
+      return refEntries.some(e => 
+        normalizeTextSmart(e.org) === normalizeTextSmart(org) &&
+        normalizeTextSmart(e.role) === normalizeTextSmart(role) &&
+        normalizeTextSmart(e.lastName) === normalizeTextSmart(lastName)
+      );
+    }
+
+    // ======================= OBJECTS UI =======================
+    function renderObjects(){const c=document.getElementById("objectsListContainer");c.innerHTML=objectNames.map(o=>`<div class="reference-item"><span>${escapeHtml(o)}</span><button class="btn btn-outline btn-sm" onclick="deleteObject('${escapeHtml(o)}')">🗑</button></div>`).join("");document.getElementById("objectDatalist").innerHTML=objectNames.map(o=>`<option value="${escapeHtml(o)}">`).join("");}
+    window.deleteObject=function(n){objectNames=objectNames.filter(x=>x!==n);saveData();renderObjects();if(document.getElementById("iulObjectName").value===n)document.getElementById("iulObjectName").value="";showToast("Удалено");};
+    function addObject(){const n=document.getElementById("newObjectName").value.trim();if(n&&!objectNames.includes(n)){objectNames.push(n);saveData();renderObjects();showToast(`"${n}" добавлен`);}document.getElementById("newObjectName").value="";}
+    function addCurrentObject(){const v=document.getElementById("iulObjectName").value.trim();if(v&&!objectNames.includes(v)){objectNames.push(v);saveData();renderObjects();showToast(`"${v}" сохранён`);}}
+
+    // ======================= IUL UI =======================
+    
+    // ★ УМНОЕ РАЗДЕЛЕНИЕ СТРОКИ НА ОРГАНИЗАЦИЮ И РОЛЬ
+    function parseWorkString(workStr) {
+      const str = workStr.trim();
+      if (!str) return null;
+      
+      // Получаем уникальные роли из справочника, сортируем по длине (сначала длинные)
+      // чтобы "Главный инженер" нашелся раньше чем "Инженер"
+      const knownRoles = [...new Set(refEntries.map(e => e.role))]
+        .sort((a, b) => b.length - a.length);
+      
+      const strLower = str.toLowerCase();
+      
+      for (const role of knownRoles) {
+        const roleLower = role.toLowerCase();
+        // Проверяем, заканчивается ли строка этой ролью (или содержит её как отдельное слово в конце)
+        // Используем регулярку для точного совпадения конца строки
+        const regex = new RegExp(`(^|\\s)${roleLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i');
+        
+        if (regex.test(strLower)) {
+          // Нашли роль! Отрезаем её от строки
+          const orgPart = str.substring(0, strLower.lastIndexOf(roleLower)).trim();
+          return { org: orgPart || str, role: role };
+        }
+      }
+      
+      // Если известная роль не найдена, пробуем эвристику: последнее слово - роль
+      const parts = str.split(/\s+/);
+      if (parts.length > 1) {
+        const potentialRole = parts.pop();
+        const potentialOrg = parts.join(" ");
+        return { org: potentialOrg, role: potentialRole };
+      }
+      
+      return { org: str, role: "" };
+    }
+
+    function renderIulRows(){
+      const c=document.getElementById("iulRowsContainer");
+      c.innerHTML=iulRows.map((row,idx)=>{
+        const hasData = row.fio.trim().length > 0 && row.work.trim().length > 0;
+        let saveBtnHtml = '';
+        
+        if (hasData) {
+           // Парсим строку для проверки дубликата
+           const parsed = parseWorkString(row.work);
+           const exists = parsed && isRefDuplicate(parsed.org, parsed.role, row.fio);
+           
+           if (!exists) {
+             saveBtnHtml = `<button class="btn btn-primary btn-sm" onclick="smartSaveToRef(${idx})" title="Распознать роль и сохранить">💾 В справочник</button>`;
+           } else {
+             saveBtnHtml = `<span style="font-size:.75rem;color:#28a745;padding:0 .5rem">✓ В базе</span>`;
+           }
+        }
+
+        return `<div class="flex-row" style="gap:.5rem">
+          <input class="input-field" style="flex:2" value="${escapeHtml(row.work)}" onchange="window.updateIulRow(${idx},'work',this.value)" placeholder="Организация и роль">
+          <input class="input-field" style="flex:1" value="${escapeHtml(row.fio)}" onchange="window.updateIulRow(${idx},'fio',this.value)" placeholder="Фамилия И.О.">
+          ${saveBtnHtml}
+          <button class="btn btn-outline btn-sm" onclick="window.removeIulRow(${idx})">✕</button>
+        </div>`;
+      }).join("");
+      refreshIulPreview();
+    }
+    
+    // ★ УМНОЕ СОХРАНЕНИЕ С АВТО-РАСПОЗНАВАНИЕМ РОЛИ
+    window.smartSaveToRef = function(idx) {
+      const row = iulRows[idx];
+      if (!row || !row.fio || !row.work) return;
+      
+      const parsed = parseWorkString(row.work);
+      let org = parsed ? parsed.org : row.work;
+      let role = parsed ? parsed.role : "";
+      
+      // Если роль не определилась автоматически или пользователь хочет уточнить
+      // Показываем диалог с предзаполненными значениями
+      const finalOrg = prompt("Организация:", org);
+      if (finalOrg === null) return;
+      
+      const finalRole = prompt("Роль (должность):", role);
+      if (finalRole === null) return;
+      
+      const lastName = row.fio.trim();
+      
+      if (isRefDuplicate(finalOrg, finalRole, lastName)) {
+        showToast("Такая запись уже существует", "error");
+        return;
+      }
+      
+      refEntries.push({id: Date.now(), org: finalOrg, role: finalRole, lastName: lastName.toLowerCase()});
+      saveData();
+      rebuildRefCache();
+      renderIulRows();
+      showToast(`✅ Сохранено: ${capitalizeFirst(lastName)} (${finalRole})`);
+    };
+
+    window.updateIulRow=function(i,f,v){iulRows[i][f]=v;renderIulRows();};
+    window.removeIulRow=function(i){iulRows.splice(i,1);if(!iulRows.length)iulRows=[{work:"",fio:""}];renderIulRows();};
+    function refreshIulPreview(){const n=document.getElementById("iulNpp").value,v=document.getElementById("iulVersion").value,o=document.getElementById("iulObjectName").value.trim()||pdfMeta.docName;document.getElementById("iulPreview").innerHTML=generateIulHtml(pdfMeta,iulRows,o,n,v);}
+    function generateIulHtml(meta,rows,obj,npp,ver){let h=`<table style="width:100%;border-collapse:collapse;">`;h+=`<tr><th colspan="3">Объект</th><th colspan="7">${escapeHtml(obj)}</th></tr>`;h+=`<tr><th>№</th><th colspan="2">Обозначение</th><th colspan="5">Наименование</th><th colspan="2">Версия</th></tr>`;h+=`<tr><td>${escapeHtml(npp)}</td><td colspan="2">${escapeHtml(meta.docNumber)}</td><td colspan="5">${escapeHtml(meta.docName)}</td><td colspan="2">${escapeHtml(ver)}</td></tr>`;h+=`<tr><td colspan="3">CRC32</td><td colspan="7">${meta.crc32}</td></tr>`;h+=`<tr><td colspan="3">Файл</td><td colspan="3">Дата</td><td colspan="4">Размер</td></tr>`;h+=`<tr><td colspan="3">${escapeHtml(meta.fileName)}</td><td colspan="3">${formatDate(meta.lastModified)}</td><td colspan="4">${meta.fileSize}</td></tr>`;h+=`<tr><th colspan="3">Работа</th><th colspan="2">ФИО</th><th colspan="2">Подпись</th><th colspan="3">Дата</th></tr>`;rows.forEach(r=>{h+=`<tr><td colspan="3" style="text-align:left">${escapeHtml(r.work)}</td><td colspan="2">${escapeHtml(r.fio)}</td><td colspan="2"></td><td colspan="3"></td></tr>`;});h+=`<tr><td colspan="5">ИУЛ</td><td colspan="3">${meta.docNumber}_УЛ</td><td>Лист</td><td>Листов</td></tr>`;h+=`<tr><td colspan="5"></td><td colspan="3"></td><td>1</td><td>1</td></tr></table>`;return h;}
+
+    // ======================= SYNC =======================
+    function exportAllData(){const s={version:"1.0",exported:new Date().toISOString()};if(document.getElementById("syncRef").checked)s.refEntries=refEntries;if(document.getElementById("syncObjects").checked)s.objects=objectNames;if(document.getElementById("syncMeta").checked)s.settings={pdfMeta,iulRows,npp:document.getElementById("iulNpp").value,ver:document.getElementById("iulVersion").value};const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(s,null,2)],{type:"application/json"}));a.download=`backup_${new Date().toISOString().slice(0,10)}.json`;a.click();showToast("Бэкап скачан");}
+    function importAllData(file){const st=document.getElementById("importStatus");st.textContent="🔄...";const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.refEntries){refEntries=d.refEntries;renderReferenceList();rebuildRefCache();}if(d.objects){objectNames=d.objects;renderObjects();}if(d.settings){if(d.settings.pdfMeta)Object.assign(pdfMeta,d.settings.pdfMeta);if(d.settings.iulRows){iulRows=d.settings.iulRows;renderIulRows();}if(d.settings.npp)document.getElementById("iulNpp").value=d.settings.npp;if(d.settings.ver)document.getElementById("iulVersion").value=d.settings.ver;}saveData();refreshIulPreview();st.textContent="✅ OK";showToast("Импорт выполнен");}catch(err){st.textContent="❌ "+err.message;showToast("Ошибка","error");}};r.readAsText(file);}
+    function resetAllData(){if(!confirm("Сбросить всё?"))return;localStorage.clear();location.reload();}
+
+    // ======================= PDF LOAD =======================
+    async function loadPDF(file){if(!file||file.type!=="application/pdf"){showToast("Требуется PDF","error");return false;}document.getElementById("fileName").innerText=file.name;document.getElementById("status").innerHTML="🔄 Загрузка...";showProgress(true,0);pdfMeta.fileName=file.name;pdfMeta.fileSize=file.size;pdfMeta.lastModified=file.lastModified;let base=file.name.replace(/\.pdf$/i,"");pdfMeta.docName=base;pdfMeta.docNumber=base;const buf=await file.arrayBuffer();pdfMeta.crc32=crc32(buf).toString(16).toUpperCase().padStart(8,"0");document.getElementById("fileInfoGrid").innerHTML=`<div>CRC32: ${pdfMeta.crc32}</div><div>Обозначение: ${escapeHtml(pdfMeta.docNumber)}</div><div>Наименование: ${escapeHtml(pdfMeta.docName)}</div><div>Дата: ${formatDate(pdfMeta.lastModified)}</div><div>Размер: ${formatBytes(pdfMeta.fileSize)}</div>`;document.getElementById("fileInfoBlock").style.display="block";pdfDocInstance=await pdfjsLib.getDocument({data:buf}).promise;pdfPages=[];for(let i=1;i<=pdfDocInstance.numPages;i++){document.getElementById("status").innerHTML=`🔄 Стр.${i}/${pdfDocInstance.numPages}`;if(i===SKIP_PAGE){pdfPages.push({page:i,words:[],pageHeight:0,viewport:null,pdfPage:null});showProgress(true,(i/pdfDocInstance.numPages)*100);continue;}const page=await pdfDocInstance.getPage(i),viewport=page.getViewport({scale:1}),tc=await page.getTextContent();pdfPages.push({page:i,words:tc.items.map(it=>({str:it.str,y:it.transform[5],x:it.transform[4],width:it.width||5,height:12})),pageHeight:viewport.height,viewport,pdfPage:page});showProgress(true,(i/pdfDocInstance.numPages)*100);}pdfLoaded=true;document.getElementById("status").innerHTML=`✓ PDF: ${pdfDocInstance.numPages} стр.`;showProgress(false);document.getElementById("searchAndCompareBtn").disabled=false;document.getElementById("showOcrZoneBtn").disabled=false;document.getElementById("zoneControlsCard").style.display="block";extractedLinesGlobal=[];document.getElementById("extractedTextCard").style.display="none";document.getElementById("resultsCard").style.display="none";initTesseractWorker().catch(e=>console.warn(e));return true;}
+    function showProgress(s,p=0){const b=document.getElementById("progressBar"),f=document.getElementById("progressFill");b.style.display=s?"block":"none";if(s)f.style.width=p+"%";}
+
+    // ======================= OCR ZONE =======================
+    async function showOcrZonePreview(){if(!pdfLoaded){showToast("Загрузите PDF","error");return;}const lp=pdfPages[pdfPages.length-1];if(!lp||!lp.pdfPage){showToast("Нет страницы","error");return;}const sc=1.5,vp=lp.viewport.clone({scale:sc});const tc=document.createElement("canvas");tc.width=vp.width;tc.height=vp.height;const cx=tc.getContext("2d");await lp.pdfPage.render({canvasContext:cx,viewport:vp}).promise;const r=getStampRect(lp,sc);cx.fillStyle="rgba(255,68,68,0.2)";cx.fillRect(r.x,r.y,r.w,r.h);cx.strokeStyle="#ff4444";cx.lineWidth=3;cx.setLineDash([8,4]);cx.strokeRect(r.x,r.y,r.w,r.h);cx.setLineDash([]);cx.fillStyle="#ff4444";cx.font="bold 16px Inter,sans-serif";cx.fillText(`🔍 Зона OCR`,r.x+5,r.y+25);const du=tc.toDataURL("image/png");const w=window.open("","_blank","width=900,height=700");if(w){w.document.write(`<html><head><title>Zone</title><style>body{margin:0;background:#333;display:flex;justify-content:center;align-items:center;min-height:100vh}img{max-width:100%;max-height:100vh}</style></head><body><img src="${du}"/></body></html>`);w.document.close();}else showToast("Разрешите попапы","error");}
+
+    // ======================= DOCX =======================
+    function getIulFileName(){const b=pdfMeta.docNumber||pdfMeta.fileName.replace(/\.pdf$/i,"")||"doc";return `${b}_УЛ.docx`;}
+    async function generateDocxBlob(meta,rows,obj,npp,ver){const{Document,Packer,Paragraph,TextRun,Table,TableRow,TableCell,WidthType,AlignmentType,VerticalAlign,BorderStyle,TableLayoutType}=docx;const borders={top:{style:BorderStyle.SINGLE,size:1,color:"000000"},bottom:{style:BorderStyle.SINGLE,size:1,color:"000000"},left:{style:BorderStyle.SINGLE,size:1,color:"000000"},right:{style:BorderStyle.SINGLE,size:1,color:"000000"}};const cell=(t,o={})=>new TableCell({columnSpan:o.colSpan||1,rowSpan:o.rowSpan||1,verticalAlign:VerticalAlign.CENTER,borders,margins:{top:100,bottom:100,left:100,right:100},children:[new Paragraph({alignment:o.align||AlignmentType.CENTER,spacing:{before:0,after:0,line:240},children:[new TextRun({text:String(t||""),font:"Arial",size:20,bold:!!o.bold})]})]});const tr=[new TableRow({children:[cell("Объект",{colSpan:3,bold:true}),cell(obj,{colSpan:7})]}),new TableRow({children:[cell("№",{bold:true}),cell("Обозначение",{colSpan:2,bold:true}),cell("Наименование",{colSpan:5,bold:true}),cell("Версия",{colSpan:2,bold:true})]}),new TableRow({children:[cell(npp),cell(meta.docNumber,{colSpan:2}),cell(meta.docName,{colSpan:5}),cell(ver,{colSpan:2})]}),new TableRow({children:[cell("CRC32",{colSpan:3,bold:true}),cell(meta.crc32,{colSpan:7})]}),new TableRow({children:[cell("Файл",{colSpan:3,bold:true}),cell("Дата",{colSpan:3,bold:true}),cell("Размер",{colSpan:4,bold:true})]}),new TableRow({children:[cell(meta.fileName,{colSpan:3}),cell(formatDate(meta.lastModified),{colSpan:3}),cell(String(meta.fileSize),{colSpan:4})]}),new TableRow({children:[cell("Работа",{colSpan:3,bold:true}),cell("ФИО",{colSpan:2,bold:true}),cell("Подпись",{colSpan:2,bold:true}),cell("Дата",{colSpan:3,bold:true})]})];rows.forEach(r=>tr.push(new TableRow({height:{value:600},children:[cell(r.work||"",{colSpan:3,align:AlignmentType.LEFT}),cell(r.fio||"",{colSpan:2}),cell("",{colSpan:2}),cell("",{colSpan:3})]})));tr.push(new TableRow({children:[cell("ИУЛ",{colSpan:5,rowSpan:2,align:AlignmentType.LEFT}),cell(meta.docNumber+"_УЛ",{colSpan:3,rowSpan:2,align:AlignmentType.RIGHT}),cell("Лист",{bold:true}),cell("Листов",{bold:true})]}));tr.push(new TableRow({children:[cell("1",{bold:true}),cell("1",{bold:true})]}));return await Packer.toBlob(new Document({sections:[{properties:{page:{margin:{top:1134,right:1134,bottom:1134,left:1134}}},children:[new Paragraph({alignment:AlignmentType.CENTER,spacing:{before:0,after:120},children:[new TextRun({text:"ИУЛ",bold:true,font:"Arial",size:22})]}),new Table({rows:tr,width:{size:9638,type:WidthType.DXA},layout:TableLayoutType.FIXED,alignment:AlignmentType.CENTER,columnWidths:[1134,1134,1247,1247,1247,1247,907,907,907,1134]})]}]}));}
+    async function downloadDocx(){const blob=await generateDocxBlob(pdfMeta,iulRows,document.getElementById("iulObjectName").value.trim()||pdfMeta.docName,document.getElementById("iulNpp").value,document.getElementById("iulVersion").value);const fn=getIulFileName();const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fn;a.click();URL.revokeObjectURL(a.href);showToast(`DOCX: ${fn}`);}
+
+    // ======================= INIT =======================
+    function init(){loadData();renderReferenceList();renderObjects();renderIulRows();refreshIulPreview();setInterval(()=>{if(fuzzyCache.size>2000)fuzzyCache.clear();if(levCache.size>2000)levCache.clear();},60000);document.querySelectorAll(".nav-btn").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".page").forEach(p=>p.classList.remove("active-page"));document.getElementById(btn.dataset.page+"Page").classList.add("active-page");document.querySelectorAll(".nav-btn").forEach(b=>{b.classList.remove("active");b.removeAttribute("aria-current");});btn.classList.add("active");btn.setAttribute("aria-current","page");if(btn.dataset.page==="iul")refreshIulPreview();}));const drop=document.getElementById("dropZone"),inp=document.getElementById("fileInput");drop.addEventListener("click",()=>inp.click());drop.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();inp.click();}});drop.addEventListener("dragover",e=>{e.preventDefault();drop.style.borderColor="var(--primary)";});drop.addEventListener("dragleave",()=>drop.style.borderColor="");drop.addEventListener("drop",async e=>{e.preventDefault();drop.style.borderColor="";if(e.dataTransfer.files[0])await loadPDF(e.dataTransfer.files[0]);});inp.addEventListener("change",async e=>{if(e.target.files[0])await loadPDF(e.target.files[0]);});document.getElementById("searchAndCompareBtn").addEventListener("click",extractAndCompare);document.getElementById("showOcrZoneBtn").addEventListener("click",showOcrZonePreview);document.getElementById("clearResultsBtn").addEventListener("click",()=>document.getElementById("resultsCard").style.display="none");document.getElementById("addRefEntryBtn").addEventListener("click",showAddRefForm);document.getElementById("cancelAddRefBtn").addEventListener("click",hideAddRefForm);document.getElementById("saveNewRefBtn").addEventListener("click",saveNewRefEntry);document.getElementById("newRefLastName").addEventListener("keydown",e=>{if(e.key==="Enter")saveNewRefEntry();});const rsi=document.getElementById("refSearchInput"),rsc=document.getElementById("refSearchClear");rsi.addEventListener("input",()=>{refSearchQuery=rsi.value.trim();renderReferenceList();});rsc.addEventListener("click",()=>{rsi.value="";refSearchQuery="";renderReferenceList();rsi.focus();});document.getElementById("exportRefBtn").addEventListener("click",()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(refEntries,null,2)],{type:"application/json"}));a.download="ref.json";a.click();});document.getElementById("importRefFile").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{refEntries=JSON.parse(ev.target.result);saveData();renderReferenceList();rebuildRefCache();showToast("Импорт OK");}catch{showToast("Ошибка","error");}};r.readAsText(f);});document.getElementById("addObjectBtn").addEventListener("click",addObject);document.getElementById("exportObjectsBtn").addEventListener("click",()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(objectNames)],{type:"application/json"}));a.download="obj.json";a.click();});document.getElementById("importObjectsFile").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{objectNames=JSON.parse(ev.target.result);saveData();renderObjects();showToast("Импорт OK");}catch{showToast("Ошибка","error");}};r.readAsText(f);});document.getElementById("addCurrentObjectBtn").addEventListener("click",addCurrentObject);document.getElementById("resetObjectBtn").addEventListener("click",()=>{document.getElementById("iulObjectName").value=pdfMeta.docName||"";refreshIulPreview();});document.getElementById("refreshIulBtn").addEventListener("click",refreshIulPreview);document.getElementById("downloadDocBtn").addEventListener("click",downloadDocx);document.getElementById("addManualRowBtn").addEventListener("click",()=>{iulRows.push({work:"",fio:""});renderIulRows();});["iulNpp","iulVersion","iulObjectName"].forEach(id=>document.getElementById(id).addEventListener("input",refreshIulPreview));const osi=document.getElementById("iulObjectSearch"),osr=document.getElementById("iulObjectSearchResults"),osc=document.getElementById("iulObjectSearchClearBtn");osi.addEventListener("input",()=>{const q=osi.value.trim().toLowerCase();osc.style.display=q?"inline-flex":"none";if(q.length<1){osr.style.display="none";return;}const m=objectNames.filter(o=>o.toLowerCase().includes(q)||normalizeTextSmart(o).includes(normalizeTextSmart(q)));osr.innerHTML=m.length?m.map(o=>`<div class="iul-search-item" data-name="${escapeHtml(o)}"><span>${escapeHtml(o)}</span></div>`).join(""):'<div style="padding:.75rem;color:#666">Нет</div>';osr.style.display="block";});osr.addEventListener("click",e=>{const i=e.target.closest(".iul-search-item");if(!i)return;document.getElementById("iulObjectName").value=i.dataset.name;refreshIulPreview();osi.value="";osr.style.display="none";osc.style.display="none";});osc.addEventListener("click",()=>{osi.value="";osr.style.display="none";osc.style.display="none";});const ssi=document.getElementById("iulSurnameSearch"),ssr=document.getElementById("iulSearchResults"),ssc=document.getElementById("iulSearchClearBtn");ssi.addEventListener("input",()=>{const q=ssi.value.trim().toLowerCase();ssc.style.display=q?"inline-flex":"none";if(q.length<2){ssr.style.display="none";return;}const m=refEntries.filter(e=>e.lastName.toLowerCase().includes(q)||normalizeTextSmart(e.lastName).includes(normalizeTextSmart(q)));ssr.innerHTML=m.length?m.map(e=>`<div class="iul-search-item" data-id="${e.id}"><span><strong>${escapeHtml(capitalizeFirst(e.lastName))}</strong> — ${escapeHtml(e.role)}</span><span class="org-name">${escapeHtml(e.org)}</span></div>`).join(""):'<div style="padding:.75rem;color:#666">Нет</div>';ssr.style.display="block";});ssr.addEventListener("click",e=>{const i=e.target.closest(".iul-search-item");if(!i)return;const en=refEntries.find(x=>x.id===parseInt(i.dataset.id));if(!en)return;iulRows.push({work:`${en.org} ${en.role}`,fio:capitalizeFirst(en.lastName)});renderIulRows();ssi.value="";ssr.style.display="none";ssc.style.display="none";showToast(`Добавлено: ${capitalizeFirst(en.lastName)}`);});ssc.addEventListener("click",()=>{ssi.value="";ssr.style.display="none";ssc.style.display="none";});document.getElementById("exportAllDataBtn").addEventListener("click",exportAllData);document.getElementById("importAllDataFile").addEventListener("change",e=>{if(e.target.files[0])importAllData(e.target.files[0]);});document.getElementById("resetAllDataBtn").addEventListener("click",resetAllData);const ws=document.getElementById("stampWidthSlider"),hs=document.getElementById("stampHeightSlider"),wv=document.getElementById("stampWidthValue"),hv=document.getElementById("stampHeightValue");ws.addEventListener("input",()=>{SEARCH_CONFIG.STAMP_WIDTH=parseInt(ws.value);wv.textContent=ws.value;ocrCache.clear();});hs.addEventListener("input",()=>{SEARCH_CONFIG.STAMP_HEIGHT=parseInt(hs.value);hv.textContent=hs.value;ocrCache.clear();});document.getElementById("resetZoneBtn").addEventListener("click",()=>{SEARCH_CONFIG.STAMP_WIDTH=550;SEARCH_CONFIG.STAMP_HEIGHT=200;ws.value=550;hs.value=200;wv.textContent="550";hv.textContent="200";ocrCache.clear();showToast("Зона: 550×200");});}
+    window.addEventListener("DOMContentLoaded",()=>{if(typeof pdfjsLib==="undefined"){alert("PDF.js not loaded");return;}pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";init();});
+    document.getElementById("signRdBtn").addEventListener("click",async()=>{const blob=await generateDocxBlob(pdfMeta,iulRows,document.getElementById("iulObjectName").value.trim()||pdfMeta.docName,document.getElementById("iulNpp").value,document.getElementById("iulVersion").value);const fn=getIulFileName();const reader=new FileReader();reader.onloadend=()=>{const b64=reader.result.split(",")[1];sessionStorage.setItem("signFiles",JSON.stringify([{name:fn,data:b64,type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}]));window.open("./sign.html?mode=auto","_blank");};reader.readAsDataURL(blob);});
+    document.getElementById("signPdBtn").addEventListener("click",()=>{sessionStorage.removeItem("signFiles");window.open("./sign.html?mode=manual","_blank");});
+  </script>
+</body>
+</html>
