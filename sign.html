@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Обработка УЛ (Mass Upload)</title>
+    <title>Обработка УЛ (Fast Local)</title>
     <link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/index.min.css" rel="stylesheet">
     
     <!-- Библиотеки -->
@@ -12,7 +12,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <!-- Supabase загружается асинхронно, не блокируя рендер -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -45,6 +46,8 @@
         .btn:hover:not(:disabled) { background: #333; border-color: #333; }
         .btn:disabled { background: #e0e0e0; border-color: #ccc; color: #888; cursor: not-allowed; }
         .btn-green { background: #1a1a1a; border-color: #1a1a1a; }
+        .btn-orange { background: #e67e22; border-color: #d35400; }
+        .btn-orange:hover:not(:disabled) { background: #d35400; border-color: #e67e22; }
         
         .process-btn { padding: 10px; aspect-ratio: 1/1; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
         .process-btn.processing .process-icon { animation: spin 1s linear infinite; }
@@ -76,6 +79,12 @@
         .preview-content .page-wrapper { text-align: center; margin: 10px 0; }
         .preview-content .page-wrapper canvas { max-width: 100%; border: 1px solid #e0e0e0; }
         
+        .missing-sigs-panel { background: #fff8e1; border: 1px solid #ffe082; padding: 12px; margin-top: 12px; border-radius: 4px; }
+        .missing-sigs-title { font-size: 13px; font-weight: 600; color: #e65100; margin-bottom: 8px; text-transform: uppercase; }
+        .missing-sig-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed #ffe082; font-size: 13px; }
+        .missing-sig-item:last-child { border-bottom: none; }
+        .missing-sig-name { font-weight: 500; color: #333; }
+        
         .date-control { display: flex; gap: 10px; align-items: center; margin: 12px 0; justify-content: center; }
         .date-control label { font-weight: 500; font-size: 13px; text-transform: uppercase; }
         .date-control input[type="date"] { border: 1px solid #b0b0b0; padding: 8px 10px; font-family: inherit; font-size: 14px; }
@@ -96,7 +105,6 @@
 
         .signatures-list-container { max-height: 50vh; overflow-y: auto; padding: 8px 0; }
         .signature-list-item { display: flex; align-items: center; padding: 10px; margin-bottom: 8px; background: #fafafa; border: 1px solid #e0e0e0; }
-        .signature-list-item input[type="checkbox"] { margin-right: 12px; transform: scale(1.2); accent-color: #1a1a1a; }
         .signature-list-item img { width: 80px; height: 35px; object-fit: contain; background: #fff; margin-right: 14px; border: 1px solid #d4d4d4; }
         .signature-list-item .surname { font-size: 15px; font-weight: 500; flex-grow: 1; }
         .delete-signature-btn { background: #e5e5e5; border: 1px solid #ccc; width: 26px; height: 26px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -110,11 +118,8 @@
         .mode-indicator.auto { background: #f0f0f0; border: 1px solid #1a1a1a; }
         .mode-indicator.manual { background: #fafafa; border: 1px dashed #888; color: #555; }
 
-        /* Стили для кнопок управления хранилищем */
         .storage-controls { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
         .storage-status { font-size: 12px; color: #555; margin-bottom: 10px; padding: 8px; background: #f9f9f9; border: 1px solid #eee; }
-        
-        /* Стили для массового превью */
         .mass-preview-list { max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding: 8px; margin-top: 8px; background: #fafafa; }
         .mass-preview-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #eee; font-size: 12px; }
         .mass-preview-item:last-child { border-bottom: none; }
@@ -192,15 +197,18 @@
     <div id="hiddenRenderArea"></div>
 
     <script>
-        // === SUPABASE CONFIG ===
+        // === КОНФИГУРАЦИЯ ===
+        const DB_FILE_NAME = 'signatures_db.json';
+        const IDB_NAME = 'UL_Signatures_DB';
+        const IDB_STORE = 'handles';
+        
+        let localDirHandle = null;
+        let localFileHandle = null;
+        
+        // Supabase инициализируется лениво (только когда нужен)
+        let supabaseClient = null;
         const SUPABASE_URL = 'https://znbfhfyjgzuojreohquq.supabase.co';
         const SUPABASE_KEY = 'sb_publishable__4DGsW8B7D0sKxnwDVPf2Q_Zbav1l87';
-        let supabaseClient = null;
-        try {
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        } catch (e) {
-            console.warn("Supabase client init failed:", e);
-        }
 
         window.signatureDatabase = {};
 
@@ -328,7 +336,187 @@
             return cleaned;
         }
 
-        async function convertDocxWithSignatures(file, overrideDateStr) {
+        async function optimizeSignatureImage(file, maxW = 400, maxH = 200) {
+            const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+            const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+            const srcCanvas = document.createElement("canvas"); srcCanvas.width = img.naturalWidth; srcCanvas.height = img.naturalHeight;
+            const ctx = srcCanvas.getContext("2d"); ctx.drawImage(img, 0, 0);
+            const { data } = ctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+            let minX = srcCanvas.width, minY = srcCanvas.height, maxX = -1, maxY = -1;
+            for (let y = 0; y < srcCanvas.height; y++) {
+                for (let x = 0; x < srcCanvas.width; x++) {
+                    const idx = (y * srcCanvas.width + x) * 4; const a = data[idx + 3];
+                    const isWhite = data[idx] > 245 && data[idx + 1] > 245 && data[idx + 2] > 245;
+                    if (a > 10 && !isWhite) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+                }
+            }
+            if (maxX < 0) { minX = 0; minY = 0; maxX = srcCanvas.width - 1; maxY = srcCanvas.height - 1; }
+            const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
+            const scale = Math.min(1, maxW / cropW, maxH / cropH);
+            const outW = Math.max(1, Math.round(cropW * scale)), outH = Math.max(1, Math.round(cropH * scale));
+            const outCanvas = document.createElement("canvas"); outCanvas.width = outW; outCanvas.height = outH;
+            outCanvas.getContext("2d").drawImage(srcCanvas, minX, minY, cropW, cropH, 0, 0, outW, outH);
+            return outCanvas.toDataURL("image/png");
+        }
+
+        // === INDEXEDDB ===
+        function openIDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(IDB_NAME, 1);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+                };
+                request.onsuccess = (event) => resolve(event.target.result);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+
+        async function saveHandleToIDB(handle) {
+            const db = await openIDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IDB_STORE, 'readwrite');
+                const store = tx.objectStore(IDB_STORE);
+                const request = store.put(handle, 'localDirHandle');
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getHandleFromIDB() {
+            const db = await openIDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IDB_STORE, 'readonly');
+                const store = tx.objectStore(IDB_STORE);
+                const request = store.get('localDirHandle');
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function clearHandleFromIDB() {
+            const db = await openIDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IDB_STORE, 'readwrite');
+                const store = tx.objectStore(IDB_STORE);
+                const request = store.delete('localDirHandle');
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // === ЛОКАЛЬНАЯ ПАПКА ===
+        const isFileSystemSupported = 'showDirectoryPicker' in window;
+
+        async function selectLocalFolder() {
+            if (!isFileSystemSupported) {
+                alert("Ваш браузер не поддерживает прямую работу с папками. Используйте Chrome или Edge.");
+                return false;
+            }
+            try {
+                localDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                localFileHandle = await localDirHandle.getFileHandle(DB_FILE_NAME, { create: true });
+                await saveHandleToIDB(localDirHandle);
+                await loadFromLocalFile();
+                updateStorageStatusUI();
+                return true;
+            } catch (err) {
+                console.error("Ошибка выбора папки:", err);
+                if (err.name !== 'AbortError') alert("Не удалось получить доступ к папке.");
+                return false;
+            }
+        }
+
+        async function loadFromLocalFile() {
+            if (!localFileHandle) return;
+            try {
+                const file = await localFileHandle.getFile();
+                const text = await file.text();
+                if (text.trim()) {
+                    const parsed = JSON.parse(text);
+                    window.signatureDatabase = { ...window.signatureDatabase, ...parsed };
+                    console.log(`✅ Загружено ${Object.keys(parsed).length} подписей из ${DB_FILE_NAME}`);
+                }
+            } catch (err) {
+                console.warn("Файл пуст или поврежден.", err);
+            }
+        }
+
+        async function saveToLocalFile() {
+            if (!localFileHandle) return false;
+            try {
+                const writable = await localFileHandle.createWritable();
+                await writable.write(JSON.stringify(window.signatureDatabase, null, 2));
+                await writable.close();
+                return true;
+            } catch (err) {
+                console.error("Ошибка записи на диск:", err);
+                return false;
+            }
+        }
+
+        // Мгновенное восстановление (без блокировки UI)
+        async function tryRestoreLocalAccess() {
+            if (!isFileSystemSupported) return;
+            try {
+                const storedHandle = await getHandleFromIDB();
+                if (!storedHandle) return;
+
+                // Проверяем разрешение без запроса (мгновенно)
+                const permission = await storedHandle.queryPermission({ mode: 'readwrite' });
+                
+                if (permission === 'granted') {
+                    localDirHandle = storedHandle;
+                    localFileHandle = await localDirHandle.getFileHandle(DB_FILE_NAME, { create: true });
+                    await loadFromLocalFile();
+                    updateStorageStatusUI();
+                } else {
+                    // Запрашиваем разрешение (браузер покажет окно, но UI уже отрисован)
+                    // Делаем это в фоне, не блокируя основной поток
+                    setTimeout(async () => {
+                        try {
+                            const request = await storedHandle.requestPermission({ mode: 'readwrite' });
+                            if (request === 'granted') {
+                                localDirHandle = storedHandle;
+                                localFileHandle = await localDirHandle.getFileHandle(DB_FILE_NAME, { create: true });
+                                await loadFromLocalFile();
+                                updateStorageStatusUI();
+                                // Если модалка открыта, обновляем её
+                                if (document.getElementById("signatureListModal")?.style.display === "flex") {
+                                    renderSignaturesList();
+                                }
+                            }
+                        } catch(e) { console.log("Доступ отклонен пользователем"); }
+                    }, 100);
+                }
+            } catch (err) {
+                console.error("Ошибка восстановления:", err);
+                await clearHandleFromIDB();
+            }
+        }
+
+        function updateStorageStatusUI() {
+            const el = document.getElementById("storageStatus");
+            if (!el) return;
+            if (localDirHandle) {
+                el.innerHTML = `💾 Локальная папка: <strong>${localDirHandle.name}</strong> <span style="color:#2a9d2a;">✓ Синхронизация включена</span>`;
+            } else {
+                el.innerHTML = `⚠️ Папка не выбрана. Нажмите <strong>«📁 Выбрать папку»</strong> для автосохранения на ПК.`;
+            }
+        }
+
+        // === SUPABASE (ЛЕНИВАЯ ЗАГРУЗКА) ===
+        function getSupabaseClient() {
+            if (!supabaseClient && window.supabase) {
+                try {
+                    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                } catch(e) { console.warn("Supabase init failed"); }
+            }
+            return supabaseClient;
+        }
+
+        // === КОНВЕРТАЦИЯ ===
+        async function convertDocxWithSignatures(file, overrideDateStr, manualSignatures = {}) {
             const hiddenArea = document.getElementById("hiddenRenderArea");
             try {
                 hiddenArea.innerHTML = ''; hiddenArea.style.visibility = 'hidden';
@@ -375,37 +563,126 @@
 
                 const tables = docxContent.querySelectorAll('table');
                 const allSurnames = Object.keys(window.signatureDatabase);
+                let missingSignatures = [];
+
+                const stopWords = ['CRC32', 'ИОС', 'НОС', 'УЛ', 'ВЕРСИЯ', 'РАЗМЕР', 'БАЙТ', 'НАИМЕНОВАНИЕ ФАЙЛА', 'ДАТА ИЗМЕНЕНИЯ', 'ЛИСТ', 'ЛИСТОВ', 'ИНФОРМАЦИОННО'];
+
                 tables.forEach((table, tableIndex) => {
                     table.style.marginTop = tableIndex === 0 ? '0' : '5px'; table.style.marginBottom = '0';
                     table.style.marginLeft = 'auto'; table.style.marginRight = 'auto'; table.style.textAlign = 'center';
+                    
                     let sigColIndex = -1, dateColIndex = -1;
+                    
                     for (const row of table.rows) {
                         for (let c = 0; c < row.cells.length; c++) {
-                            const text = (row.cells[c].textContent || '').toUpperCase();
-                            if (text.includes('ПОДПИСЬ') || text.includes('ПОДПИС')) sigColIndex = c;
-                            if (text.includes('ДАТА')) dateColIndex = c;
+                            const text = (row.cells[c].textContent || '').toUpperCase().trim();
+                            if (text === 'ПОДПИСЬ' || text.includes('ПОДПИС')) sigColIndex = c;
+                            if (text === 'ДАТА' || text.includes('ДАТА')) dateColIndex = c;
                         }
                         if (sigColIndex !== -1) break;
                     }
+
+                    if (sigColIndex === -1) return;
+
                     for (const row of table.rows) {
-                        for (let c = 0; c < row.cells.length; c++) { row.cells[c].style.textAlign = 'center'; row.cells[c].style.verticalAlign = 'middle'; }
-                        const rowText = row.textContent.toUpperCase();
-                        const foundSurname = allSurnames.find(s => rowText.includes(s));
-                        if (foundSurname) {
-                            if (sigColIndex !== -1 && row.cells[sigColIndex]) {
-                                const cell = row.cells[sigColIndex];
-                                const cellText = cell.textContent.trim();
-                                if (cellText === '' || cellText === 'Подпись') {
-                                    const img = new Image(); img.src = window.signatureDatabase[foundSurname];
-                                    img.style.maxWidth = '80px'; img.style.maxHeight = '40px'; img.style.width = 'auto'; img.style.height = 'auto';
-                                    img.style.display = 'inline-block'; img.style.verticalAlign = 'middle';
-                                    cell.innerHTML = ''; cell.appendChild(img); cell.style.textAlign = 'center';
+                        const rowTextUpper = row.textContent.toUpperCase();
+                        
+                        let isMetaDataRow = false;
+                        for (const word of stopWords) {
+                            if (rowTextUpper.includes(word)) { isMetaDataRow = true; break; }
+                        }
+                        if (rowTextUpper.includes('ХАРАКТЕР') || rowTextUpper.includes('ФИО') || isMetaDataRow) continue;
+                        if (!row.cells[sigColIndex]) continue;
+
+                        for (let c = 0; c < row.cells.length; c++) { 
+                            row.cells[c].style.textAlign = 'center'; 
+                            row.cells[c].style.verticalAlign = 'middle'; 
+                        }
+                        
+                        const rowTextRaw = row.textContent;
+                        let foundSurnameKey = null;
+                        let matchedInitial = null;
+                        let cleanRowName = "";
+
+                        for (const key of allSurnames) {
+                            if (key.includes(' ')) {
+                                const parts = key.split(' ');
+                                const surnamePart = parts[0];
+                                const initialPart = parts[1];
+                                const regex = new RegExp(`${surnamePart}[\\s\\.\\-]*${initialPart}`, 'i');
+                                if (regex.test(rowTextRaw)) {
+                                    foundSurnameKey = key;
+                                    matchedInitial = initialPart;
+                                    cleanRowName = surnamePart;
+                                    break;
                                 }
                             }
-                            if (dateColIndex !== -1 && row.cells[dateColIndex]) {
-                                const cell = row.cells[dateColIndex];
-                                const cellText = cell.textContent.trim();
-                                if (cellText === '' || cellText === 'Дата подписания') { cell.textContent = formattedDate; cell.style.textAlign = 'center'; }
+                        }
+
+                        if (!foundSurnameKey) {
+                            foundSurnameKey = allSurnames.find(s => {
+                                if (s.includes(' ')) return false;
+                                return rowTextUpper.includes(s);
+                            });
+                            if (foundSurnameKey) cleanRowName = foundSurnameKey;
+                        }
+
+                        let manualSigData = null;
+                        if (!foundSurnameKey) {
+                            for (const [mKey, mData] of Object.entries(manualSignatures)) {
+                                if (rowTextRaw.includes(mKey) || mKey.includes(cleanRowName)) {
+                                    manualSigData = mData;
+                                    if (!cleanRowName) cleanRowName = mKey.split(' ')[0]; 
+                                    break;
+                                }
+                            }
+                        }
+
+                        const sigCell = row.cells[sigColIndex];
+                        
+                        if (foundSurnameKey || manualSigData) {
+                            const img = new Image(); 
+                            img.src = foundSurnameKey ? window.signatureDatabase[foundSurnameKey] : manualSigData;
+                            img.style.maxWidth = '80px'; img.style.maxHeight = '40px'; img.style.width = 'auto'; img.style.height = 'auto';
+                            img.style.display = 'inline-block'; img.style.verticalAlign = 'middle';
+                            sigCell.innerHTML = ''; 
+                            sigCell.appendChild(img); 
+                            
+                            let initToClean = matchedInitial;
+                            if (!initToClean && sigColIndex > 0 && row.cells[sigColIndex-1]) {
+                                const fioText = row.cells[sigColIndex-1].textContent.trim();
+                                const matchInit = fioText.match(/\s+([А-ЯЁ])\.?\s*$/);
+                                if (matchInit) initToClean = matchInit[1];
+                            }
+
+                            if (initToClean) {
+                                for (let k = 0; k < row.cells.length; k++) {
+                                    if (k !== sigColIndex && row.cells[k]) {
+                                        let cellContent = row.cells[k].textContent;
+                                        const regexClean = new RegExp(`[\\s\\-\\.]*${initToClean}\\.?`, 'gi');
+                                        row.cells[k].textContent = cellContent.replace(regexClean, '').trim();
+                                    }
+                                }
+                            }
+                        } else {
+                            let displayName = "Неизвестный";
+                            if (sigColIndex > 0 && row.cells[sigColIndex-1]) {
+                                displayName = row.cells[sigColIndex-1].textContent.trim();
+                            }
+                            const rowId = `row_${tableIndex}_${Array.from(table.rows).indexOf(row)}`;
+                            missingSignatures.push({
+                                id: rowId,
+                                name: displayName,
+                                rawText: rowTextRaw.trim().substring(0, 60)
+                            });
+                        }
+
+                        if (dateColIndex !== -1 && row.cells[dateColIndex]) {
+                            const cell = row.cells[dateColIndex];
+                            const cellText = cell.textContent.trim();
+                            if (cellText === '' || cellText === 'Дата подписания') { 
+                                cell.textContent = formattedDate; 
+                                cell.style.textAlign = 'center'; 
                             }
                         }
                     }
@@ -460,7 +737,18 @@
                     outputFileName = sanitizeFileName(baseName) + "_УЛ.pdf";
                 }
 
-                return { pdfBlob, outputFileName, canvases: [finalCanvas], conversionSuccess: true, originalName: file.name, converted: true, totalPages: Math.ceil(pdfImgHeight / pageHeight), detectedIulTitle, overrideDatePerFile: formattedDate };
+                return { 
+                    pdfBlob, 
+                    outputFileName, 
+                    canvases: [finalCanvas], 
+                    conversionSuccess: true, 
+                    originalName: file.name, 
+                    converted: true, 
+                    totalPages: Math.ceil(pdfImgHeight / pageHeight), 
+                    detectedIulTitle, 
+                    overrideDatePerFile: formattedDate,
+                    missingSignatures: missingSignatures
+                };
             } catch (err) {
                 console.error("DOCX conversion error:", err); hiddenArea.innerHTML = ''; hiddenArea.style.visibility = 'hidden'; throw err;
             }
@@ -470,13 +758,23 @@
             if (selectedFiles.length === 0) return;
             clearHiddenArea(); processedResults = []; allProcessedBlobs = []; multiPreviewContainer.innerHTML = ""; zipBtnContainer.style.display = "none";
             processBtn.disabled = true; processBtn.classList.add("processing"); showProgress();
+            
+            const sessionManualSigs = {};
+
             for (let i = 0; i < selectedFiles.length; i++) {
                 const file = selectedFiles[i]; clearHiddenArea();
                 if (file.name.endsWith('.docx')) {
                     updateProgress((i / selectedFiles.length) * 100, `Обработка: ${file.name}`);
                     try {
-                        const result = await convertDocxWithSignatures(file);
-                        if (result) { processedResults.push(result); allProcessedBlobs.push({ blob: result.pdfBlob, fileName: result.outputFileName, displayName: result.detectedIulTitle || file.name }); }
+                        const fileManualSigs = sessionManualSigs[i] || {};
+                        const result = await convertDocxWithSignatures(file, null, fileManualSigs);
+                        
+                        if (result) {
+                            result.fileIndex = i;
+                            result.manualSigsStore = fileManualSigs;
+                            processedResults.push(result); 
+                            allProcessedBlobs.push({ blob: result.pdfBlob, fileName: result.outputFileName, displayName: result.detectedIulTitle || file.name });
+                        }
                     } catch (err) { alert(`❌ Не удалось обработать ${file.name}: ${err.message}`); }
                 }
                 clearHiddenArea();
@@ -487,19 +785,58 @@
         }
 
         function clearHiddenArea() { const h = document.getElementById("hiddenRenderArea"); if (h) { h.innerHTML = ''; h.style.visibility = 'hidden'; } }
-        async function reprocessFileWithDate(file, newDateStr) { return await convertDocxWithSignatures(file, newDateStr); }
+        
+        async function reprocessSingleFile(fileIndex, newDateStr = null, newManualSig = null, rowId = null) {
+            const file = selectedFiles[fileIndex];
+            const existingResult = processedResults.find(r => r.fileIndex === fileIndex);
+            
+            if (newManualSig && rowId && existingResult) {
+                if (!existingResult.manualSigsStore) existingResult.manualSigsStore = {};
+                const missingSig = existingResult.missingSignatures.find(m => m.id === rowId);
+                if (missingSig) {
+                    existingResult.manualSigsStore[missingSig.rawText] = newManualSig;
+                }
+            }
+
+            const dateToUse = newDateStr || existingResult?.overrideDatePerFile;
+            const manualSigsToUse = existingResult?.manualSigsStore || {};
+
+            try {
+                const newResult = await convertDocxWithSignatures(file, dateToUse, manualSigsToUse);
+                if (newResult) {
+                    newResult.fileIndex = fileIndex;
+                    newResult.manualSigsStore = manualSigsToUse;
+                    
+                    const idx = processedResults.findIndex(r => r.fileIndex === fileIndex);
+                    if (idx !== -1) processedResults[idx] = newResult;
+                    
+                    if (allProcessedBlobs[idx]) {
+                        allProcessedBlobs[idx].blob = newResult.pdfBlob;
+                        allProcessedBlobs[idx].fileName = newResult.outputFileName;
+                    }
+                    
+                    renderMultiPreview();
+                }
+            } catch (err) {
+                console.error("Reprocess error:", err);
+                alert("Ошибка при обновлении документа");
+            }
+        }
 
         function renderMultiPreview() {
             if (!multiPreviewContainer) return; multiPreviewContainer.innerHTML = "";
             if (processedResults.length === 0) return;
+            
             processedResults.forEach((result, idx) => {
-                const { canvases, originalName, converted, overrideDatePerFile, totalPages, detectedIulTitle, outputFileName } = result;
+                const { canvases, originalName, converted, overrideDatePerFile, totalPages, detectedIulTitle, outputFileName, missingSignatures, fileIndex } = result;
                 const block = document.createElement("div"); block.className = "preview-block";
                 const header = document.createElement("div"); header.className = "preview-header";
                 let badgeHTML = converted ? ' <span class="file-type-badge badge-converted">DOCX→PDF</span>' : '';
                 let iulInfo = detectedIulTitle ? `<span class="iul-info">📑 УЛ: ${detectedIulTitle}</span>` : '';
                 header.innerHTML = `<span><strong>${originalName}</strong>${badgeHTML} ${iulInfo}<span class="result-filename">📄 ${outputFileName}</span></span><span class="toggle-icon">▼</span>`;
+                
                 const content = document.createElement("div"); content.className = "preview-content";
+                
                 canvases.forEach((canvas, cIdx) => {
                     const wrapper = document.createElement("div"); wrapper.className = "page-wrapper";
                     wrapper.innerHTML = `<div style="font-size:12px;color:#64748b;margin-bottom:6px;">Страница ${cIdx + 1} / ${totalPages || canvases.length}</div>`;
@@ -507,6 +844,51 @@
                     clone.getContext("2d").drawImage(canvas, 0, 0); clone.style.maxWidth = "100%";
                     wrapper.appendChild(clone); content.appendChild(wrapper);
                 });
+
+                if (missingSignatures && missingSignatures.length > 0) {
+                    const panel = document.createElement("div");
+                    panel.className = "missing-sigs-panel";
+                    panel.innerHTML = `<div class="missing-sigs-title">⚠️ Не найдены подписи для:</div>`;
+                    
+                    missingSignatures.forEach(sig => {
+                        const item = document.createElement("div");
+                        item.className = "missing-sig-item";
+                        item.innerHTML = `
+                            <span class="missing-sig-name">${sig.name}</span>
+                            <button class="btn btn-orange" style="padding: 4px 12px; font-size: 11px;" data-row-id="${sig.id}" data-file-idx="${fileIndex}">📎 Загрузить PNG</button>
+                        `;
+                        panel.appendChild(item);
+                    });
+                    content.appendChild(panel);
+
+                    panel.querySelectorAll('button').forEach(btn => {
+                        btn.onclick = async (e) => {
+                            const rowId = e.target.getAttribute('data-row-id');
+                            const fIdx = parseInt(e.target.getAttribute('data-file-idx'));
+                            
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/png,image/jpeg,image/jpg';
+                            input.onchange = async (ev) => {
+                                const f = ev.target.files[0];
+                                if (f) {
+                                    try {
+                                        e.target.textContent = "⏳ Обработка...";
+                                        e.target.disabled = true;
+                                        const dataUrl = await optimizeSignatureImage(f);
+                                        await reprocessSingleFile(fIdx, null, dataUrl, rowId);
+                                    } catch (err) {
+                                        alert("Ошибка загрузки изображения");
+                                        e.target.textContent = "📎 Загрузить PNG";
+                                        e.target.disabled = false;
+                                    }
+                                }
+                            };
+                            input.click();
+                        };
+                    });
+                }
+
                 const dateControl = document.createElement("div"); dateControl.className = "date-control";
                 const dateLabel = document.createElement("label"); dateLabel.textContent = "Дата:";
                 const dateInput = document.createElement("input"); dateInput.type = "date";
@@ -514,21 +896,19 @@
                 if (year && month && day) dateInput.value = `${year}-${month}-${day}`; else dateInput.value = new Date().toISOString().split('T')[0];
                 const resetDateBtn = document.createElement("button"); resetDateBtn.textContent = "↻"; resetDateBtn.className = "reset-date-btn";
                 dateControl.appendChild(dateLabel); dateControl.appendChild(dateInput); dateControl.appendChild(resetDateBtn);
+                
                 const handleDateChange = async (newDateStr) => {
-                    const pages = content.querySelectorAll(".page-wrapper"); pages.forEach(p => p.innerHTML = '<p style="text-align:center;">Обновление...</p>');
-                    const newResult = await reprocessFileWithDate(selectedFiles[idx], newDateStr);
-                    if (newResult) {
-                        Object.assign(result, newResult);
-                        if (allProcessedBlobs[idx]) { allProcessedBlobs[idx].blob = newResult.pdfBlob; allProcessedBlobs[idx].fileName = newResult.outputFileName; allProcessedBlobs[idx].displayName = newResult.detectedIulTitle || selectedFiles[idx].name; }
-                        renderMultiPreview();
-                    }
+                    await reprocessSingleFile(fileIndex, newDateStr);
                 };
                 dateInput.addEventListener("change", () => { if (!dateInput.value) return; const d = new Date(dateInput.value); handleDateChange(d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })); });
                 resetDateBtn.addEventListener("click", () => { const t = new Date(); dateInput.value = t.toISOString().split('T')[0]; handleDateChange(t.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })); });
                 content.appendChild(dateControl);
+
                 const downloadBtn = document.createElement("button"); downloadBtn.className = "btn"; downloadBtn.textContent = "Скачать PDF"; downloadBtn.style.marginTop = "10px";
                 downloadBtn.onclick = () => { const url = URL.createObjectURL(result.pdfBlob); const a = document.createElement("a"); a.href = url; a.download = result.outputFileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); };
-                content.appendChild(downloadBtn); block.appendChild(header); block.appendChild(content); multiPreviewContainer.appendChild(block);
+                content.appendChild(downloadBtn); 
+
+                block.appendChild(header); block.appendChild(content); multiPreviewContainer.appendChild(block);
                 header.onclick = () => { const isCollapsed = content.style.display === "none"; content.style.display = isCollapsed ? "block" : "none"; header.querySelector(".toggle-icon").textContent = isCollapsed ? "▼" : "▲"; };
             });
             multiPreviewContainer.style.display = "block";
@@ -557,107 +937,47 @@
             hideProgress(); clearHiddenArea();
         }
 
-        // === LOCAL BACKUP & SUPABASE MANAGEMENT ===
-        
-        function downloadBackupJSON() {
-            const jsonStr = JSON.stringify(window.signatureDatabase, null, 2);
-            const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `signatures_backup_${new Date().toISOString().slice(0,10)}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-
-        async function loadSignaturesFromSupabase() {
-            if (!supabaseClient) return;
-            try {
-                const { data, error } = await supabaseClient.from('signatures').select('surname, image_url');
-                if (error) throw error;
-                const db = {}; 
-                data.forEach(row => { db[row.surname.toUpperCase()] = row.image_url; });
-                window.signatureDatabase = { ...db };
-                console.log(`✅ Загружено ${data.length} подписей из Supabase`);
-            } catch (err) { 
-                console.warn("Не удалось загрузить из Supabase, используем локальные данные:", err); 
-            }
-        }
+        // === УПРАВЛЕНИЕ ПОДПИСЯМИ ===
 
         async function persistSignature(surname, dataUrl) {
             window.signatureDatabase[surname.toUpperCase()] = dataUrl;
             
-            if (supabaseClient) {
-                try {
-                    const { error } = await supabaseClient.from('signatures').upsert({ 
+            // 1. Диск (приоритет, мгновенно)
+            let diskSaved = false;
+            if (localFileHandle) diskSaved = await saveToLocalFile();
+
+            // 2. Облако (фон, не блокирует)
+            if (!diskSaved) {
+                const client = getSupabaseClient();
+                if (client) {
+                    client.from('signatures').upsert({ 
                         surname: surname.toUpperCase(), 
                         image_url: dataUrl 
-                    }, { onConflict: 'surname' });
-                    
-                    if (error) throw error;
-                    return { status: "cloud_saved", msg: `✅ Подпись ${surname} сохранена в Supabase` };
-                } catch (err) {
-                    console.error("Ошибка Supabase:", err);
-                    downloadBackupJSON();
-                    return { status: "local_saved", msg: `⚠️ Supabase недоступен. Подпись ${surname} сохранена локально. Автоматически скачан файл бэкапа.` };
+                    }, { onConflict: 'surname' }).then(({error}) => {
+                        if (!error) console.log("Saved to Supabase");
+                    }).catch(() => {});
                 }
-            } else {
-                downloadBackupJSON();
-                return { status: "local_saved", msg: `⚠️ Клиент Supabase не инициализирован. Подпись сохранена локально. Скачан файл бэкапа.` };
             }
+
+            if (diskSaved) return { status: "disk_saved", msg: `✅ Подпись ${surname} сохранена в папку ${localDirHandle.name}` };
+            return { status: "memory_saved", msg: `✅ Подпись ${surname} сохранена. (Выберите папку для постоянного хранения)` };
         }
 
         async function removeSignaturePersisted(surname) {
             delete window.signatureDatabase[surname.toUpperCase()];
             
-            if (supabaseClient) {
-                try {
-                    const { error } = await supabaseClient.from('signatures').delete().eq('surname', surname.toUpperCase());
-                    if (error) throw error;
-                    return { status: "cloud_deleted", msg: `🗑️ Подпись ${surname} удалена из Supabase` };
-                } catch (err) {
-                    console.error("Ошибка удаления из Supabase:", err);
-                    downloadBackupJSON();
-                    return { status: "local_deleted", msg: `⚠️ Supabase недоступен. Подпись удалена локально. Скачан обновленный бэкап.` };
-                }
-            } else {
-                downloadBackupJSON();
-                return { status: "local_deleted", msg: `⚠️ Клиент не активен. Подпись удалена локально. Скачан бэкап.` };
-            }
-        }
+            let diskSaved = false;
+            if (localFileHandle) diskSaved = await saveToLocalFile();
 
-        function updateStorageStatus() {
-            const el = document.getElementById("storageStatus"); 
-            if (!el) return;
-            
-            let statusHtml = `☁️ Supabase: <span style="color:${supabaseClient ? '#2a9d2a' : '#e76f51'}">${supabaseClient ? 'Подключен' : 'Отключен'}</span> | `;
-            statusHtml += `💾 Локальный бэкап: <span style="color:#2a9d2a">Активен</span>`;
-            el.innerHTML = statusHtml;
-        }
-
-        async function optimizeSignatureImage(file, maxW = 400, maxH = 200) {
-            const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
-            const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
-            const srcCanvas = document.createElement("canvas"); srcCanvas.width = img.naturalWidth; srcCanvas.height = img.naturalHeight;
-            const ctx = srcCanvas.getContext("2d"); ctx.drawImage(img, 0, 0);
-            const { data } = ctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
-            let minX = srcCanvas.width, minY = srcCanvas.height, maxX = -1, maxY = -1;
-            for (let y = 0; y < srcCanvas.height; y++) {
-                for (let x = 0; x < srcCanvas.width; x++) {
-                    const idx = (y * srcCanvas.width + x) * 4; const a = data[idx + 3];
-                    const isWhite = data[idx] > 245 && data[idx + 1] > 245 && data[idx + 2] > 245;
-                    if (a > 10 && !isWhite) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+            if (!diskSaved) {
+                const client = getSupabaseClient();
+                if (client) {
+                    client.from('signatures').delete().eq('surname', surname.toUpperCase()).then(() => {}).catch(() => {});
                 }
             }
-            if (maxX < 0) { minX = 0; minY = 0; maxX = srcCanvas.width - 1; maxY = srcCanvas.height - 1; }
-            const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
-            const scale = Math.min(1, maxW / cropW, maxH / cropH);
-            const outW = Math.max(1, Math.round(cropW * scale)), outH = Math.max(1, Math.round(cropH * scale));
-            const outCanvas = document.createElement("canvas"); outCanvas.width = outW; outCanvas.height = outH;
-            outCanvas.getContext("2d").drawImage(srcCanvas, minX, minY, cropW, cropH, 0, 0, outW, outH);
-            return outCanvas.toDataURL("image/png");
+
+            if (diskSaved) return { status: "disk_deleted", msg: `🗑️ Подпись ${surname} удалена из папки ${localDirHandle.name}` };
+            return { status: "memory_deleted", msg: `🗑️ Подпись ${surname} удалена.` };
         }
 
         function extractSurnameFromFilename(fileName) { return fileName.replace(/\.[^.]+$/, "").replace(/[_\-\s]+/g, " ").trim().toUpperCase(); }
@@ -704,9 +1024,8 @@
                 const isAuto = autoCheckbox.checked; 
                 manualGroup.style.display = isAuto ? "none" : "block"; 
                 autoHint.style.display = isAuto ? "block" : "none"; 
-                // Если выбран ручной ввод, отключаем множественный выбор
                 sigFileInput.multiple = isAuto;
-                if (!isAuto) sigFileInput.value = ""; // сброс при переключении
+                if (!isAuto) sigFileInput.value = "";
             }
             autoCheckbox.addEventListener("change", toggleNameMode); 
             toggleNameMode();
@@ -720,7 +1039,6 @@
                 if (files.length === 0) return;
 
                 if (files.length === 1) {
-                    // Одиночный режим
                     const file = files[0];
                     if (file && file.type.startsWith("image/")) {
                         const reader = new FileReader(); 
@@ -732,7 +1050,6 @@
                         }
                     }
                 } else {
-                    // Массовый режим
                     if (!autoCheckbox.checked) {
                         alert("Для массовой загрузки включите 'Брать фамилию из имени файла'");
                         sigFileInput.value = "";
@@ -754,7 +1071,6 @@
                 const files = Array.from(sigFileInput.files);
                 if (files.length === 0) { alert("Выберите изображение(я) подписи"); return; }
                 
-                // Проверка типов
                 for (const f of files) {
                     if (!f.type.match("image/(png|jpeg|jpg)")) { alert(`Файл ${f.name} не поддерживается (только PNG/JPG)`); return; }
                 }
@@ -818,8 +1134,8 @@
                         <div id="storageStatus" class="storage-status"></div>
                         
                         <div class="storage-controls">
-                            <button id="loadJsonBtn" class="btn" style="flex:1;min-width:100px;padding:8px;font-size:13px;">📂 Загрузить из JSON</button>
-                            <button id="saveJsonBtn" class="btn" style="flex:1;min-width:100px;padding:8px;font-size:13px;">💾 Скачать JSON</button>
+                            <button id="selectFolderBtn" class="btn" style="flex:1;min-width:100px;padding:8px;font-size:13px;">📁 Выбрать папку</button>
+                            <button id="loadJsonBtn" class="btn" style="flex:1;min-width:100px;padding:8px;font-size:13px;">📂 Импорт JSON</button>
                         </div>
 
                         <div class="form-group"><input type="text" id="signatureSearch" placeholder="Поиск по фамилии..." style="width:100%;padding:8px;margin-bottom:12px;background:#fff;border:1px solid #b0b0b0;font-family:inherit;" /></div>
@@ -831,6 +1147,11 @@
             document.getElementById("signatureListModal").onclick = (e) => { if (e.target === document.getElementById("signatureListModal")) e.target.style.display = "none"; };
             document.getElementById("signatureSearch").oninput = renderSignaturesList;
 
+            document.getElementById("selectFolderBtn").onclick = async () => {
+                await selectLocalFolder();
+                renderSignaturesList();
+            };
+
             document.getElementById("loadJsonBtn").onclick = () => {
                 const input = document.createElement("input");
                 input.type = "file"; input.accept = ".json,application/json";
@@ -841,9 +1162,10 @@
                         try {
                             const parsed = JSON.parse(ev.target.result);
                             if (typeof parsed === 'object' && !Array.isArray(parsed)) {
-                                window.signatureDatabase = parsed;
+                                window.signatureDatabase = { ...window.signatureDatabase, ...parsed };
+                                if (localFileHandle) saveToLocalFile();
                                 renderSignaturesList();
-                                alert(`✅ Загружено ${Object.keys(parsed).length} подписей из файла.`);
+                                alert(`✅ Загружено ${Object.keys(parsed).length} подписей.`);
                             } else {
                                 alert("❌ Неверный формат JSON файла.");
                             }
@@ -853,21 +1175,16 @@
                 };
                 input.click();
             };
-
-            document.getElementById("saveJsonBtn").onclick = () => {
-                if (Object.keys(window.signatureDatabase).length === 0) { alert("Нет подписей для сохранения."); return; }
-                downloadBackupJSON();
-            };
         }
 
         function renderSignaturesList() {
             const container = document.getElementById("signaturesListContainer"); const countEl = document.getElementById("signaturesCount");
-            if (!container || !countEl) return; updateStorageStatus();
+            if (!container || !countEl) return; updateStorageStatusUI();
             const searchTerm = (document.getElementById("signatureSearch")?.value || "").trim().toUpperCase();
             const allSurnames = Object.keys(window.signatureDatabase).sort();
             const filtered = searchTerm ? allSurnames.filter(s => s.includes(searchTerm)) : allSurnames;
             countEl.textContent = filtered.length;
-            if (filtered.length === 0) { container.innerHTML = `<p style='color:#555;text-align:center;'>${searchTerm ? 'Нет совпадений' : 'Нет подписей в базе.'}</p>`; return; }
+            if (filtered.length === 0) { container.innerHTML = `<p style='color:#555;text-align:center;'>${searchTerm ? 'Нет совпадений' : 'Нет подписей. Выберите папку для начала работы.'}</p>`; return; }
             container.innerHTML = filtered.map(surname => `
                 <div class="signature-list-item">
                     <img src="${window.signatureDatabase[surname]}" alt="${surname}" onerror="this.style.display='none'">
@@ -905,13 +1222,36 @@
             }
         }
 
-        document.addEventListener("DOMContentLoaded", async () => {
-            await loadSignaturesFromSupabase();
-            initSignatureManager(); initSignatureListModal(); handleLaunchMode();
+        // === МГНОВЕННЫЙ СТАРТ ===
+        document.addEventListener("DOMContentLoaded", () => {
+            // 1. Сразу рисуем интерфейс (ничего не ждем)
+            initSignatureManager(); 
+            initSignatureListModal(); 
+            handleLaunchMode();
+            
             const listBtn = document.getElementById("signatureListBtn");
             if (listBtn) listBtn.onclick = () => { renderSignaturesList(); document.getElementById("signatureListModal").style.display = "flex"; };
             const logo = document.getElementById("clickableLogo");
             if (logo) logo.addEventListener("click", () => document.getElementById("signatureModal").style.display = "flex");
+
+            // 2. Асинхронно восстанавливаем папку (не блокирует UI)
+            tryRestoreLocalAccess().then(() => {
+                // Если папка не подключена, пытаемся тихо подгрузить из Supabase в фоне
+                if (!localDirHandle) {
+                    const client = getSupabaseClient();
+                    if (client) {
+                        client.from('signatures').select('surname, image_url').then(({data}) => {
+                            if (data) {
+                                data.forEach(row => { window.signatureDatabase[row.surname.toUpperCase()] = row.image_url; });
+                                // Обновляем UI если модалка открыта
+                                if (document.getElementById("signatureListModal")?.style.display === "flex") {
+                                    renderSignaturesList();
+                                }
+                            }
+                        }).catch(() => {});
+                    }
+                }
+            });
         });
     </script>
 </body>
